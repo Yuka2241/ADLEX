@@ -1,9 +1,8 @@
 -- ============================================================
--- GITHUB WHITELIST CHECK
+-- GITHUB WHITELIST CHECK (БЕЗ КИКА)
 -- ============================================================
 
-local WHITELIST_URL = "https://raw.githubusercontent.com/Yuka2241/adlex-whitelist/main/whitelist.json"
-local KICK_PLACE_ID =  -- Замени на ID своего плейса для кика
+local WHITELIST_URL = "https://raw.githubusercontent.com/ТВОЙ_НИК/ТВОЙ_РЕПО/main/whitelist.json"
 
 local function checkWhitelist()
     local userId = _G.lp.UserId
@@ -16,53 +15,58 @@ local function checkWhitelist()
     if success then
         local data = httpService:JSONDecode(result)
         local isAllowed = false
-        local customMessage = "У вас нет доступа к этому скрипту."
         
-        for _, user in ipairs(data.whitelist) do
-            if user.userId == userId then
+        for _, allowedId in ipairs(data.whitelist) do
+            if allowedId == userId then
                 isAllowed = true
-                if user.message then
-                    customMessage = user.message
-                end
                 break
             end
         end
         
         if not isAllowed then
-            -- Показываем сообщение и кикаем
-            local kickGui = Instance.new("ScreenGui", _G.lp:WaitForChild("PlayerGui"))
-            local frame = Instance.new("Frame", kickGui)
-            frame.Size = UDim2.new(0, 400, 0, 200)
-            frame.Position = UDim2.new(0.5, -200, 0.5, -100)
+            -- Просто показываем ошибку и удаляем GUI
+            local errorGui = Instance.new("ScreenGui", _G.lp:WaitForChild("PlayerGui"))
+            local frame = Instance.new("Frame", errorGui)
+            frame.Size = UDim2.new(0, 350, 0, 120)
+            frame.Position = UDim2.new(0.5, -175, 0.5, -60)
             frame.BackgroundColor3 = Color3.fromRGB(20, 5, 5)
             frame.BorderSizePixel = 0
             Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+            local stroke = Instance.new("UIStroke", frame)
+            stroke.Color = Color3.fromRGB(255, 50, 50)
+            stroke.Thickness = 2
             
             local title = Instance.new("TextLabel", frame)
-            title.Size = UDim2.new(1, 0, 0, 40)
+            title.Size = UDim2.new(1, 0, 0, 30)
             title.BackgroundTransparency = 1
-            title.Text = " ДОСТУП ЗАПРЕЩЕН"
-            title.TextColor3 = Color3.fromRGB(255, 50, 50)
+            title.Text = "⛔ ДОСТУП ЗАПРЕЩЕН"
+            title.TextColor3 = Color3.fromRGB(255, 80, 80)
             title.Font = Enum.Font.GothamBlack
-            title.TextSize = 20
+            title.TextSize = 18
             
             local msg = Instance.new("TextLabel", frame)
-            msg.Size = UDim2.new(1, -20, 0, 60)
-            msg.Position = UDim2.new(0, 10, 0, 50)
+            msg.Size = UDim2.new(1, -20, 0, 50)
+            msg.Position = UDim2.new(0, 10, 0, 35)
             msg.BackgroundTransparency = 1
-            msg.Text = customMessage .. "\n\nВаш ID: " .. userId
+            msg.Text = "Вас нет в whitelist\n\nВаш UserId: " .. userId
             msg.TextColor3 = Color3.fromRGB(200, 200, 200)
             msg.Font = Enum.Font.GothamMedium
-            msg.TextSize = 14
+            msg.TextSize = 13
             msg.TextWrapped = true
             
-            task.wait(3)
-            kickGui:Destroy()
-            game:GetService("TeleportService"):Teleport(KICK_PLACE_ID, _G.lp)
-            error("Whitelist check failed")
+            -- Удаляем основной GUI
+            if _G.sg then _G.sg:Destroy() end
+            
+            -- Ждем и удаляем сообщение об ошибке
+            task.wait(5)
+            errorGui:Destroy()
+            
+            -- Останавливаем скрипт
+            error("Whitelist check failed - user not authorized")
         end
     else
-        warn("[Adlex] Не удалось загрузить whitelist")
+        warn("[Adlex] Не удалось загрузить whitelist с GitHub")
+        -- Если GitHub недоступен — разрешаем доступ (или можешь поменять на false)
     end
 end
 
