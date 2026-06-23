@@ -2,7 +2,7 @@
 -- GITHUB WHITELIST CHECK (БЕЗ КИКА)
 -- ============================================================
 
-local WHITELIST_URL = "https://raw.githubusercontent.com/ТВОЙ_НИК/ТВОЙ_РЕПО/main/whitelist.json"
+local WHITELIST_URL = "https://raw.githubusercontent.com/Yuka2241/adlex-whitelist/main/whitelist.json"
 
 local function checkWhitelist()
     local userId = _G.lp.UserId
