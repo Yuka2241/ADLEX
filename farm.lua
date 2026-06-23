@@ -1,92 +1,12 @@
 -- ============================================================
--- ADLEX.LUA v2.6 - С ПРОВЕРКОЙ WHITELIST
+-- ADLEX.LUA - ПОЛНАЯ ВЕРСИЯ С WHITELIST
 -- ============================================================
+
+-- Ждём загрузки игры
+repeat task.wait() until game and game:GetService("Players")
 
 local P, U, R, H = game:GetService("Players"), game:GetService("UserInputService"), game:GetService("RunService"), game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
-
--- ============================================================
--- ПРОВЕРКА WHITELIST С GITHUB
--- ============================================================
-
-local WHITELIST_URL = "https://raw.githubusercontent.com/Yuka2241/adlex-whitelist/main/whitelist.json"
-
-local function checkWhitelist()
-    local userId = P.LocalPlayer.UserId
-    local success, result = pcall(function()
-        return H:GetAsync(WHITELIST_URL)
-    end)
-    
-    if success then
-        local data = H:JSONDecode(result)
-        local isAllowed = false
-        
-        -- Проверяем whitelist (массив userId)
-        if data.whitelist then
-            for _, allowedId in ipairs(data.whitelist) do
-                if allowedId == userId then
-                    isAllowed = true
-                    break
-                end
-            end
-        end
-        
-        if not isAllowed then
-            -- Показываем окно ошибки
-            local errorGui = Instance.new("ScreenGui", P.LocalPlayer:WaitForChild("PlayerGui"))
-            errorGui.ResetOnSpawn = false
-            errorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            
-            local frame = Instance.new("Frame", errorGui)
-            frame.Size = UDim2.new(0, 350, 0, 150)
-            frame.Position = UDim2.new(0.5, -175, 0.5, -75)
-            frame.BackgroundColor3 = Color3.fromRGB(20, 5, 5)
-            frame.BorderSizePixel = 0
-            Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-            local stroke = Instance.new("UIStroke", frame)
-            stroke.Color = Color3.fromRGB(255, 50, 50)
-            stroke.Thickness = 2
-            
-            local title = Instance.new("TextLabel", frame)
-            title.Size = UDim2.new(1, 0, 0, 40)
-            title.BackgroundTransparency = 1
-            title.Text = "⛔ ДОСТУП ЗАПРЕЩЕН"
-            title.TextColor3 = Color3.fromRGB(255, 80, 80)
-            title.Font = Enum.Font.GothamBlack
-            title.TextSize = 20
-            
-            local msg = Instance.new("TextLabel", frame)
-            msg.Size = UDim2.new(1, -20, 0, 60)
-            msg.Position = UDim2.new(0, 10, 0, 45)
-            msg.BackgroundTransparency = 1
-            msg.Text = "Вас нет в whitelist\n\nВаш UserId: " .. userId .. "\n\nОбратитесь к разработчику"
-            msg.TextColor3 = Color3.fromRGB(200, 200, 200)
-            msg.Font = Enum.Font.GothamMedium
-            msg.TextSize = 13
-            msg.TextWrapped = true
-            msg.TextYAlignment = Enum.TextYAlignment.Top
-            
-            -- Удаляем GUI через 5 секунд
-            task.delay(5, function()
-                errorGui:Destroy()
-            end)
-            
-            -- Останавливаем скрипт
-            error("Whitelist check failed - user not authorized")
-        end
-    else
-        -- Если GitHub недоступен - показываем предупреждение но продолжаем
-        warn("[Adlex] Не удалось загрузить whitelist с GitHub")
-        -- Можешь изменить на error() если хочешь блокировать при недоступности
-    end
-end
-
--- Запускаем проверку
-checkWhitelist()
-
--- ============================================================
--- ОСНОВНОЙ КОД ADLEX
--- ============================================================
 
 _G.lp = P.LocalPlayer
 _G.tabs = {}
@@ -101,6 +21,76 @@ _G.flyBinding = false
 _G.menuKey = Enum.KeyCode.RightShift
 _G.menuBinding = false
 _G.chamsColor = Color3.fromRGB(128, 128, 128)
+
+-- ============================================================
+-- GITHUB WHITELIST CHECK
+-- ============================================================
+
+local WHITELIST_URL = "https://raw.githubusercontent.com/Yuka2241/adlex-whitelist/main/whitelist.json"
+
+local function checkWhitelist()
+    local userId = _G.lp.UserId
+    local httpService = game:GetService("HttpService")
+    
+    local success, result = pcall(function()
+        return httpService:GetAsync(WHITELIST_URL)
+    end)
+    
+    if success then
+        local data = httpService:JSONDecode(result)
+        local isAllowed = false
+        
+        for _, allowedId in ipairs(data.whitelist) do
+            if allowedId == userId then
+                isAllowed = true
+                break
+            end
+        end
+        
+        if not isAllowed then
+            local errorGui = Instance.new("ScreenGui", _G.lp:WaitForChild("PlayerGui"))
+            local frame = Instance.new("Frame", errorGui)
+            frame.Size = UDim2.new(0, 350, 0, 120)
+            frame.Position = UDim2.new(0.5, -175, 0.5, -60)
+            frame.BackgroundColor3 = Color3.fromRGB(20, 5, 5)
+            frame.BorderSizePixel = 0
+            Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+            local stroke = Instance.new("UIStroke", frame)
+            stroke.Color = Color3.fromRGB(255, 50, 50)
+            stroke.Thickness = 2
+            
+            local title = Instance.new("TextLabel", frame)
+            title.Size = UDim2.new(1, 0, 0, 30)
+            title.BackgroundTransparency = 1
+            title.Text = "⛔ ДОСТУП ЗАПРЕЩЕН"
+            title.TextColor3 = Color3.fromRGB(255, 80, 80)
+            title.Font = Enum.Font.GothamBlack
+            title.TextSize = 18
+            
+            local msg = Instance.new("TextLabel", frame)
+            msg.Size = UDim2.new(1, -20, 0, 50)
+            msg.Position = UDim2.new(0, 10, 0, 35)
+            msg.BackgroundTransparency = 1
+            msg.Text = "Вас нет в whitelist\n\nВаш UserId: " .. userId
+            msg.TextColor3 = Color3.fromRGB(200, 200, 200)
+            msg.Font = Enum.Font.GothamMedium
+            msg.TextSize = 13
+            msg.TextWrapped = true
+            
+            task.wait(5)
+            errorGui:Destroy()
+            error("Whitelist check failed - user not authorized")
+        end
+    else
+        warn("[Adlex] Не удалось загрузить whitelist с GitHub")
+    end
+end
+
+checkWhitelist()
+
+-- ============================================================
+-- ОСНОВНОЙ КОД СКРИПТА
+-- ============================================================
 
 local container = (gethui and gethui()) or game:GetService("CoreGui") or _G.lp:WaitForChild("PlayerGui")
 if container:FindFirstChild("AdlexMenu") then container.AdlexMenu:Destroy() end
@@ -162,9 +152,9 @@ local function showTooltip(text)
 tooltipLabel.Text = text
 tooltipLabel.Visible = true
 local connection
-connection = R.RenderStepped:Connect(function()
+connection = game:GetService("RunService").RenderStepped:Connect(function()
 if not tooltipLabel.Visible then connection:Disconnect() return end
-local mousePos = U:GetMouseLocation()
+local mousePos = game:GetService("UserInputService"):GetMouseLocation()
 tooltipLabel.Position = UDim2.new(0, mousePos.X + 15, 0, mousePos.Y - 35)
 end)
 end
@@ -185,7 +175,7 @@ TweenService:Create(b, TweenInfo.new(0.2), {Size = size, Position = pos}):Play()
 hideTooltip()
 end)
 b.MouseButton1Down:Connect(function()
-local mousePos = U:GetMouseLocation()
+local mousePos = game:GetService("UserInputService"):GetMouseLocation()
 local relativeX = mousePos.X - b.AbsolutePosition.X
 local relativeY = (mousePos.Y - 36) - b.AbsolutePosition.Y
 local ripple = Instance.new("Frame", b)
@@ -226,7 +216,7 @@ _G.p2 = _G.addTab("Teleportation", "Vector3 Matrix Teleport")
 _G.p3 = _G.addTab("Settings", "Interface Customization")
 local wmFrame = Instance.new("Frame", _G.sg)
 wmFrame.Size = UDim2.new(0, 240, 0, 25)
-wmFrame.Position = UDim2.new(1, -250, 0, 10)
+wmFrame.Position = UDim2.new(0, 10, 0, 10)
 wmFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 wmFrame.BorderSizePixel = 0
 Instance.new("UICorner", wmFrame).CornerRadius = UDim.new(0, 4)
@@ -243,7 +233,9 @@ wmText.TextSize = 11
 wmText.TextXAlignment = Enum.TextXAlignment.Left
 task.spawn(function()
 while task.wait(1) do
-if wmText then wmText.Text = "Adlex.lua | " .. os.date("%d.%m.%Y - %X") end
+if wmText then
+wmText.Text = "Adlex.lua | " .. os.date("%d.%m.%Y - %X")
+end
 end
 end)
 _G.disp = Instance.new("TextLabel", _G.p1)
@@ -260,15 +252,6 @@ local bx, bxStr = _G.cBtn(_G.p1, "Copy X", UDim2.new(0, 0, 0, 165), UDim2.new(0,
 local by, byStr = _G.cBtn(_G.p1, "Copy Y", UDim2.new(0, 110, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Скопировать координату Y")
 local bz, bzStr = _G.cBtn(_G.p1, "Copy Z", UDim2.new(0, 220, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Скопировать координату Z")
 _G.bx, _G.by, _G.bz = bx, by, bz
-bx.MouseButton1Click:Connect(function() 
-if setclipboard then setclipboard(tostring(_G.coords.x)) showToast("Copied", "X: " .. _G.coords.x) end
-end)
-by.MouseButton1Click:Connect(function() 
-if setclipboard then setclipboard(tostring(_G.coords.y)) showToast("Copied", "Y: " .. _G.coords.y) end
-end)
-bz.MouseButton1Click:Connect(function() 
-if setclipboard then setclipboard(tostring(_G.coords.z)) showToast("Copied", "Z: " .. _G.coords.z) end
-end)
 local fz, fzStr = _G.cBtn(_G.p1, "Freeze Character: OFF", UDim2.new(0, 0, 0, 215), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Заморозить положение персонажа")
 fz.TextColor3 = Color3.fromRGB(180, 180, 185)
 _G.fz, _G.fzStr = fz, fzStr
@@ -319,8 +302,8 @@ _G.tp.MouseButton1Click:Connect(doTp)
 local function uAt(s)
 _G.isAuto = s
 _G.at.Text = _G.isAuto and "Auto Teleport: ON" or "Auto Teleport: OFF"
-_G.at.BackgroundColor3 = _G.isAuto and Color3.fromRGB(30, 120, 50) or Color3.fromRGB(40, 40, 45)
-_G.at.TextColor3 = _G.isAuto and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
+_G.at.BackgroundColor3 = _G.isAuto and Color3.fromRGB(40, 167, 69) or Color3.fromRGB(40, 40, 45)
+_G.at.TextColor3 = _G.isAuto and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
 _G.atStr.Enabled = _G.isAuto
 end
 _G.at.MouseButton1Click:Connect(function()
@@ -330,14 +313,14 @@ end)
 _G.noclipBtn.MouseButton1Click:Connect(function()
 _G.noclippedPlayers = not _G.noclippedPlayers
 _G.noclipBtn.Text = _G.noclippedPlayers and "Noclip Players: ON" or "Noclip Players: OFF"
-_G.noclipBtn.BackgroundColor3 = _G.noclippedPlayers and Color3.fromRGB(30, 120, 50) or Color3.fromRGB(40, 40, 45)
-_G.noclipBtn.TextColor3 = _G.noclippedPlayers and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
+_G.noclipBtn.BackgroundColor3 = _G.noclippedPlayers and Color3.fromRGB(40, 167, 69) or Color3.fromRGB(40, 40, 45)
+_G.noclipBtn.TextColor3 = _G.noclippedPlayers and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
 _G.noclipStr.Enabled = _G.noclippedPlayers
 end)
 local function uFlV()
 _G.flb.Text = "Fly: " .. (_G.flyActive and "ON" or "OFF") .. " [" .. _G.flyKey.Name .. "]"
-_G.flb.BackgroundColor3 = _G.flyActive and Color3.fromRGB(30, 120, 50) or Color3.fromRGB(40, 40, 45)
-_G.flb.TextColor3 = _G.flyActive and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
+_G.flb.BackgroundColor3 = _G.flyActive and Color3.fromRGB(40, 167, 69) or Color3.fromRGB(40, 40, 45)
+_G.flb.TextColor3 = _G.flyActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
 _G.flbStr.Enabled = _G.flyActive
 end
 local function tgFl()
@@ -351,21 +334,19 @@ end
 _G.flb.MouseButton1Click:Connect(tgFl)
 _G.flb.MouseButton2Click:Connect(function() _G.flyBinding = true _G.bindOverlay.Visible = true end)
 local nUp = 0
-R.RenderStepped:Connect(function()
+game:GetService("RunService").RenderStepped:Connect(function()
 if os.clock() >= nUp then
 nUp = os.clock() + 0.1
 local r = _G.lp.Character and _G.lp.Character:FindFirstChild("HumanoidRootPart")
 if r and _G.disp then
-_G.coords.x = string.format("%.2f", r.Position.X)
-_G.coords.y = string.format("%.2f", r.Position.Y)
-_G.coords.z = string.format("%.2f", r.Position.Z)
+_G.coords.x, _G.coords.y, _G.coords.z = string.format("%.2f", r.Position.X), string.format("%.2f", r.Position.Y), string.format("%.2f", r.Position.Z)
 _G.disp.Text = "  X: " .. _G.coords.x .. "\n  Y: " .. _G.coords.y .. "\n  Z: " .. _G.coords.z
 end
 end
 if _G.noclippedPlayers and _G.lp.Character then
 local myRoot = _G.lp.Character:FindFirstChild("HumanoidRootPart")
 if myRoot then
-for _, pl in pairs(P:GetPlayers()) do
+for _, pl in pairs(game:GetService("Players"):GetPlayers()) do
 if pl ~= _G.lp and pl.Character then
 local otherRoot = pl.Character:FindFirstChild("HumanoidRootPart")
 if otherRoot and (myRoot.Position - otherRoot.Position).Magnitude < 4 then
@@ -378,20 +359,20 @@ end
 local c = _G.lp.Character local r = c and c:FindFirstChild("HumanoidRootPart")
 if _G.flyActive and r then
 local cam = workspace.CurrentCamera.CFrame local m = Vector3.new(0, 0, 0)
-if U:IsKeyDown(Enum.KeyCode.W) then m = m + cam.LookVector end
-if U:IsKeyDown(Enum.KeyCode.S) then m = m - cam.LookVector end
-if U:IsKeyDown(Enum.KeyCode.A) then m = m - cam.RightVector end
-if U:IsKeyDown(Enum.KeyCode.D) then m = m + cam.RightVector end
-if U:IsKeyDown(Enum.KeyCode.Space) then m = m + Vector3.new(0, 1, 0) end
-if U:IsKeyDown(Enum.KeyCode.LeftShift) then m = m - Vector3.new(0, 1, 0) end
+if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then m = m + cam.LookVector end
+if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.S) then m = m - cam.LookVector end
+if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.A) then m = m - cam.RightVector end
+if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.D) then m = m + cam.RightVector end
+if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then m = m + Vector3.new(0, 1, 0) end
+if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftShift) then m = m - Vector3.new(0, 1, 0) end
 if m.Magnitude ~= 0 then r.Velocity = m.Unit * 50 else r.Velocity = Vector3.new(0, 0.1, 0) end
 end
 end)
 local function uFr(s)
 _G.frz = s local r = _G.lp.Character and _G.lp.Character:FindFirstChild("HumanoidRootPart")
 _G.fz.Text = _G.frz and "Freeze Character: ON" or "Freeze Character: OFF"
-_G.fz.BackgroundColor3 = _G.frz and Color3.fromRGB(160, 40, 50) or Color3.fromRGB(40, 40, 45)
-_G.fz.TextColor3 = _G.frz and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
+_G.fz.BackgroundColor3 = _G.frz and Color3.fromRGB(220, 53, 69) or Color3.fromRGB(40, 40, 45)
+_G.fz.TextColor3 = _G.frz and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
 _G.fzStr.Enabled = _G.frz
 if r then r.Anchored = _G.frz end
 end
@@ -431,8 +412,8 @@ end
 setup(player.Character)
 player.CharacterAdded:Connect(setup)
 end
-for _, pl in pairs(P:GetPlayers()) do applyChams(pl) end
-P.PlayerAdded:Connect(applyChams)
+for _, pl in pairs(game:GetService("Players"):GetPlayers()) do applyChams(pl) end
+game:GetService("Players").PlayerAdded:Connect(applyChams)
 local Themes = {
 Black = {bg = Color3.fromRGB(15, 15, 18), side = Color3.fromRGB(22, 22, 26), text = Color3.fromRGB(255, 255, 255)},
 Gray = {bg = Color3.fromRGB(35, 35, 40), side = Color3.fromRGB(45, 45, 50), text = Color3.fromRGB(240, 240, 245)},
@@ -440,22 +421,11 @@ Light = {bg = Color3.fromRGB(240, 240, 245), side = Color3.fromRGB(225, 225, 230
 }
 local curTheme = Themes.Black
 local function uTheme()
-_G.mf.BackgroundColor3 = curTheme.bg 
-_G.sb.BackgroundColor3 = curTheme.side
+_G.mf.BackgroundColor3 = curTheme.bg _G.sb.BackgroundColor3 = curTheme.side
+for _, v in pairs(_G.tabs) do if v.b then v.b.BackgroundColor3 = curTheme.side if _G.curTab == v.name then v.b.BackgroundColor3 = Color3.fromRGB(42,42,48) end end end
 wmFrame.BackgroundColor3 = curTheme.bg
-for _, v in pairs(_G.tabs) do 
-if v.b then 
-v.b.BackgroundColor3 = curTheme.side 
-if _G.curTab == v.name then v.b.BackgroundColor3 = Color3.fromRGB(42,42,48) end 
-end 
 end
-end
-local function updateMenuKeyUI() 
-if _G.tabs["Settings"] and _G.tabs["Settings"].f then
-local btn = _G.tabs["Settings"].f:FindFirstChild("MKeyBtn")
-if btn then btn.Text = "Menu Key: [" .. _G.menuKey.Name .. "]" end
-end
-end
+local function updateMenuKeyUI() _G.tabs["Settings"].f:FindFirstChild("MKeyBtn").Text = "Menu Key: [" .. _G.menuKey.Name .. "]" end
 local dropContainer = Instance.new("Frame", _G.p3)
 dropContainer.Size, dropContainer.Position, dropContainer.BackgroundColor3, dropContainer.BorderSizePixel, dropContainer.ZIndex = UDim2.new(0, 160, 0, 35), UDim2.new(0, 0, 0, 40), Color3.fromRGB(28, 28, 33), 0, 6
 Instance.new("UICorner", dropContainer).CornerRadius = UDim.new(0, 5)
@@ -498,7 +468,7 @@ applyChamsBtn.MouseButton1Click:Connect(function()
 local r, g, b = chamsInput.Text:match("(%d+),(%d+),(%d+)")
 if r and g and b then
 _G.chamsColor = Color3.fromRGB(tonumber(r), tonumber(g), tonumber(b))
-for _, pl in pairs(P:GetPlayers()) do
+for _, pl in pairs(game:GetService("Players"):GetPlayers()) do
 if pl.Character and pl.Character:FindFirstChildOfClass("Highlight") then
 pl.Character:FindFirstChildOfClass("Highlight").FillColor = _G.chamsColor
 end
@@ -510,20 +480,9 @@ end
 end)
 local mkb = _G.cBtn(_G.p3, "Menu Key: [RightShift]", UDim2.new(0, 0, 0, 205), UDim2.new(0, 200, 0, 35), Color3.fromRGB(114, 9, 183), "Изменить кнопку меню") mkb.Name = "MKeyBtn"
 mkb.MouseButton1Click:Connect(function() _G.menuBinding = true _G.bindOverlay.Text = "Нажмите клавишу для закрытия меню..." _G.bindOverlay.Visible = true end)
-_G.bindOverlay = Instance.new("Frame", _G.sg)
-_G.bindOverlay.Size = UDim2.new(0, 300, 0, 60)
-_G.bindOverlay.Position = UDim2.new(0.5, -150, 0.5, -30)
-_G.bindOverlay.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-_G.bindOverlay.BorderSizePixel = 0
-_G.bindOverlay.Visible = false
-_G.bindOverlay.ZIndex = 200
-Instance.new("UICorner", _G.bindOverlay).CornerRadius = UDim.new(0, 6)
-local boStroke = Instance.new("UIStroke", _G.bindOverlay)
-boStroke.Color = Color3.fromRGB(80, 80, 90)
-boStroke.Thickness = 1
-U.InputBegan:Connect(function(i, g)
+game:GetService("UserInputService").InputBegan:Connect(function(i, g)
 if _G.flyBinding and i.KeyCode ~= Enum.KeyCode.Unknown and i.UserInputType == Enum.UserInputType.Keyboard then _G.flyKey = i.KeyCode _G.flyBinding = false _G.bindOverlay.Visible = false uFlV() return end
 if _G.menuBinding and i.KeyCode ~= Enum.KeyCode.Unknown and i.UserInputType == Enum.UserInputType.Keyboard then _G.menuKey = i.KeyCode _G.menuBinding = false _G.bindOverlay.Visible = false updateMenuKeyUI() return end
 if g then return end if i.KeyCode == _G.flyKey then tgFl() end if i.KeyCode == _G.menuKey then _G.mf.Visible = not _G.mf.Visible end
 end)
-game:GetService("TestService"):Message("[Adlex]: Loaded with whitelist protection")
+game:GetService("TestService"):Message("[Adlex]: Loaded Adlex.lua with whitelist")
