@@ -1,4 +1,75 @@
 -- ============================================================
+-- GITHUB WHITELIST CHECK
+-- ============================================================
+
+local WHITELIST_URL = "https://raw.githubusercontent.com/Yuka2241/adlex-whitelist/main/whitelist.json"
+local KICK_PLACE_ID =  -- Замени на ID своего плейса для кика
+
+local function checkWhitelist()
+    local userId = _G.lp.UserId
+    local httpService = game:GetService("HttpService")
+    
+    local success, result = pcall(function()
+        return httpService:GetAsync(WHITELIST_URL)
+    end)
+    
+    if success then
+        local data = httpService:JSONDecode(result)
+        local isAllowed = false
+        local customMessage = "У вас нет доступа к этому скрипту."
+        
+        for _, user in ipairs(data.whitelist) do
+            if user.userId == userId then
+                isAllowed = true
+                if user.message then
+                    customMessage = user.message
+                end
+                break
+            end
+        end
+        
+        if not isAllowed then
+            -- Показываем сообщение и кикаем
+            local kickGui = Instance.new("ScreenGui", _G.lp:WaitForChild("PlayerGui"))
+            local frame = Instance.new("Frame", kickGui)
+            frame.Size = UDim2.new(0, 400, 0, 200)
+            frame.Position = UDim2.new(0.5, -200, 0.5, -100)
+            frame.BackgroundColor3 = Color3.fromRGB(20, 5, 5)
+            frame.BorderSizePixel = 0
+            Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+            
+            local title = Instance.new("TextLabel", frame)
+            title.Size = UDim2.new(1, 0, 0, 40)
+            title.BackgroundTransparency = 1
+            title.Text = " ДОСТУП ЗАПРЕЩЕН"
+            title.TextColor3 = Color3.fromRGB(255, 50, 50)
+            title.Font = Enum.Font.GothamBlack
+            title.TextSize = 20
+            
+            local msg = Instance.new("TextLabel", frame)
+            msg.Size = UDim2.new(1, -20, 0, 60)
+            msg.Position = UDim2.new(0, 10, 0, 50)
+            msg.BackgroundTransparency = 1
+            msg.Text = customMessage .. "\n\nВаш ID: " .. userId
+            msg.TextColor3 = Color3.fromRGB(200, 200, 200)
+            msg.Font = Enum.Font.GothamMedium
+            msg.TextSize = 14
+            msg.TextWrapped = true
+            
+            task.wait(3)
+            kickGui:Destroy()
+            game:GetService("TeleportService"):Teleport(KICK_PLACE_ID, _G.lp)
+            error("Whitelist check failed")
+        end
+    else
+        warn("[Adlex] Не удалось загрузить whitelist")
+    end
+end
+
+-- Запускаем проверку
+checkWhitelist()
+
+-- ============================================================
 -- ADLEX.LUA v2.6 — ПОЛНАЯ ВЕРСИЯ
 -- ============================================================
 
