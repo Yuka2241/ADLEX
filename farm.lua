@@ -1,125 +1,5 @@
--- ============================================================
--- ADLEX.LUA v2.6 — ПОЛНАЯ ВЕРСИЯ
--- ============================================================
-
-local P = game:GetService("Players")
-local U = game:GetService("UserInputService")
-local R = game:GetService("RunService")
-local H = game:GetService("HttpService")
+local P, U, R, H = game:GetService("Players"), game:GetService("UserInputService"), game:GetService("RunService"), game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
-local Debris = game:GetService("Debris")
-local CoreGui = game:GetService("CoreGui")
-
--- ============================================================
--- СИСТЕМА ЗАЩИТЫ
--- ============================================================
-
-_G.ADLEX_FINGERPRINT = "ADLEX-v2.6-" .. os.clock() .. "-" .. math.random(1000, 9999)
-local _ADLEX_WATERMARK_2026 = "AdlexScript|v2.6|Protected|Fingerprint:" .. _G.ADLEX_FINGERPRINT
-local _hidden_marker = {
-    __version = "2.6.0",
-    __author = "Adlex",
-    __build = os.time(),
-    __integrity = true,
-    __protected = true
-}
-
-local function crc32(str)
-    local crc = 0xFFFFFFFF
-    local crc_table = {}
-    for i = 0, 255 do
-        local c = i
-        for j = 0, 7 do
-            if c % 2 == 1 then
-                c = bit32.bxor(0xEDB88320, bit32.rshift(c, 1))
-            else
-                c = bit32.rshift(c, 1)
-            end
-        end
-        crc_table[i] = c
-    end
-    for i = 1, #str do
-        local byte = string.byte(str, i)
-        crc = bit32.bxor(bit32.rshift(crc, 8), crc_table[bit32.band(bit32.bxor(crc, byte), 0xFF)])
-    end
-    return bit32.bxor(crc, 0xFFFFFFFF)
-end
-
-local function fnv1a_hash(str)
-    local hash = 0xcbf29ce484222325
-    local prime = 0x100000001b3
-    for i = 1, #str do
-        hash = bit32.bxor(hash, string.byte(str, i))
-        hash = (hash * prime) % (2^64)
-    end
-    return string.format("%016X", hash)
-end
-
-local _ADLEX_CODE_HASH = fnv1a_hash(_ADLEX_WATERMARK_2026 .. _G.ADLEX_FINGERPRINT)
-local _ADLEX_CRC = crc32(_ADLEX_WATERMARK_2026)
-
-local _honeypot_log = {}
-local function honeypot_trap(func_name)
-    return function(...)
-        table.insert(_honeypot_log, {
-            time = os.time(),
-            func = func_name,
-            args = {...},
-            caller = debug.getinfo and debug.getinfo(2, "S") and debug.getinfo(2, "S").short_src or "unknown"
-        })
-        return nil
-    end
-end
-
-_G.getscript = honeypot_trap("getscript")
-_G.getscripts = honeypot_trap("getscripts")
-_G.getloadedmodules = honeypot_trap("getloadedmodules")
-_G.decompile = honeypot_trap("decompile")
-_G.hookfunction = honeypot_trap("hookfunction")
-_G.getrawmetatable = honeypot_trap("getrawmetatable")
-
-local integrity_checks = {}
-integrity_checks[1] = function() return _G.ADLEX_FINGERPRINT:find("ADLEX%-v2.6%-") ~= nil end
-integrity_checks[2] = function() return _hidden_marker.__protected == true end
-integrity_checks[3] = function() return type(_G.getscript) == "function" end
-integrity_checks[4] = function() return crc32(_ADLEX_WATERMARK_2026) == _ADLEX_CRC end
-
-local function runIntegrityChecks()
-    local failed = {}
-    for i, check in ipairs(integrity_checks) do
-        local success, result = pcall(check)
-        if not success or not result then
-            table.insert(failed, i)
-        end
-    end
-    return #failed == 0, failed
-end
-
-local function scheduleDelayedCheck()
-    local delay = math.random(30, 120)
-    task.delay(delay, function()
-        local ok, failed = runIntegrityChecks()
-        if not ok then
-            warn("[Adlex] Integrity check failed at parts: " .. table.concat(failed, ", "))
-        end
-        scheduleDelayedCheck()
-    end)
-end
-scheduleDelayedCheck()
-
-task.spawn(function()
-    while task.wait(60) do
-        local ok, failed = runIntegrityChecks()
-        if not ok then
-            warn("[Adlex] Periodic integrity check failed: " .. table.concat(failed, ", "))
-        end
-    end
-end)
-
--- ============================================================
--- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
--- ============================================================
-
 _G.lp = P.LocalPlayer
 _G.tabs = {}
 _G.curTab = nil
@@ -130,471 +10,20 @@ _G.coords = {x = "0.00", y = "0.00", z = "0.00"}
 _G.flyActive = false
 _G.flyKey = Enum.KeyCode.B
 _G.flyBinding = false
-_G.menuKey = Enum.KeyCode.Insert
+_G.menuKey = Enum.KeyCode.RightShift
 _G.menuBinding = false
 _G.chamsColor = Color3.fromRGB(128, 128, 128)
-_G.scriptStartTime = os.clock()
-_G.logoLabels = {}
 
--- ============================================================
--- КОНТЕЙНЕР GUI
--- ============================================================
+-- FLING переменные
+_G.walkflinging = false
+_G.flingTarget = nil
+_G.flingConnections = {}
 
-local container = (gethui and gethui()) or CoreGui or _G.lp:WaitForChild("PlayerGui")
+local container = (gethui and gethui()) or game:GetService("CoreGui") or _G.lp:WaitForChild("PlayerGui")
 if container:FindFirstChild("AdlexMenu") then container.AdlexMenu:Destroy() end
 _G.sg = Instance.new("ScreenGui", container)
 _G.sg.Name = "AdlexMenu"
 _G.sg.ResetOnSpawn = false
-_G.sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
--- ============================================================
--- НЕСКРЫВАЕМЫЙ WATERMARK (В CoreGui)
--- ============================================================
-
-local wmGui = Instance.new("ScreenGui", CoreGui)
-wmGui.Name = "Adlex_WM_Core"
-wmGui.ResetOnSpawn = false
-wmGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-local wmFrame = Instance.new("Frame", wmGui)
-wmFrame.Size = UDim2.new(0, 220, 0, 32)
-wmFrame.Position = UDim2.new(1, -230, 0, 10)
-wmFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
-wmFrame.BorderSizePixel = 0
-Instance.new("UICorner", wmFrame).CornerRadius = UDim.new(0, 6)
-local wmStroke = Instance.new("UIStroke", wmFrame)
-wmStroke.Color = Color3.fromRGB(60, 60, 65)
-wmStroke.Thickness = 1
-
-local wmLogo = Instance.new("TextLabel", wmFrame)
-wmLogo.Size = UDim2.new(0, 32, 1, 0)
-wmLogo.BackgroundTransparency = 1
-wmLogo.Text = "A"
-wmLogo.TextColor3 = Color3.fromRGB(114, 9, 183)
-wmLogo.Font = Enum.Font.GothamBlack
-wmLogo.TextSize = 16
-
-local wmText = Instance.new("TextLabel", wmFrame)
-wmText.Size = UDim2.new(1, -35, 1, 0)
-wmText.Position = UDim2.new(0, 32, 0, 0)
-wmText.BackgroundTransparency = 1
-wmText.Text = "Adlex v2.6 | Loading..."
-wmText.TextColor3 = Color3.fromRGB(220, 220, 225)
-wmText.Font = Enum.Font.Code
-wmText.TextSize = 11
-wmText.TextXAlignment = Enum.TextXAlignment.Left
-
-local wmUptime = Instance.new("TextLabel", wmFrame)
-wmUptime.Size = UDim2.new(1, -10, 0, 12)
-wmUptime.Position = UDim2.new(0, 5, 1, -12)
-wmUptime.BackgroundTransparency = 1
-wmUptime.Text = "Uptime: 00:00"
-wmUptime.TextColor3 = Color3.fromRGB(120, 120, 125)
-wmUptime.Font = Enum.Font.Code
-wmUptime.TextSize = 9
-wmUptime.TextXAlignment = Enum.TextXAlignment.Right
-
-task.spawn(function()
-    local start = os.clock()
-    while task.wait(1) do
-        if wmText then wmText.Text = "Adlex v2.6 | " .. os.date("%H:%M:%S") end
-        if wmUptime then
-            local diff = os.clock() - start
-            local m = math.floor(diff / 60)
-            local s = math.floor(diff % 60)
-            wmUptime.Text = string.format("Uptime: %02d:%02d", m, s)
-        end
-    end
-end)
-
--- ============================================================
--- STREAMER ALERT (REC DETECTED)
--- ============================================================
-
-local streamAlert = Instance.new("Frame", wmGui)
-streamAlert.Size = UDim2.new(0, 140, 0, 28)
-streamAlert.Position = UDim2.new(1, -380, 0, 10)
-streamAlert.BackgroundColor3 = Color3.fromRGB(40, 10, 10)
-streamAlert.BorderSizePixel = 0
-streamAlert.Visible = false
-Instance.new("UICorner", streamAlert).CornerRadius = UDim.new(0, 6)
-local saStroke = Instance.new("UIStroke", streamAlert)
-saStroke.Color = Color3.fromRGB(255, 50, 50)
-saStroke.Thickness = 1
-
-local saText = Instance.new("TextLabel", streamAlert)
-saText.Size = UDim2.new(1, 0, 1, 0)
-saText.BackgroundTransparency = 1
-saText.Text = " REC DETECTED"
-saText.TextColor3 = Color3.fromRGB(255, 80, 80)
-saText.Font = Enum.Font.GothamBold
-saText.TextSize = 12
-
-task.spawn(function()
-    while task.wait(0.8) do
-        if streamAlert.Visible then
-            TweenService:Create(saStroke, TweenInfo.new(0.4), {Color = Color3.fromRGB(255, 0, 0)}):Play()
-            TweenService:Create(saText, TweenInfo.new(0.4), {TextColor3 = Color3.fromRGB(255, 0, 0)}):Play()
-            task.wait(0.4)
-            TweenService:Create(saStroke, TweenInfo.new(0.4), {Color = Color3.fromRGB(100, 0, 0)}):Play()
-            TweenService:Create(saText, TweenInfo.new(0.4), {TextColor3 = Color3.fromRGB(255, 80, 80)}):Play()
-        end
-    end
-end)
-
--- ============================================================
--- KICK WARNING
--- ============================================================
-
-local kickOverlay = Instance.new("Frame", _G.sg)
-kickOverlay.Size = UDim2.new(1, 0, 1, 0)
-kickOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-kickOverlay.BackgroundTransparency = 0.85
-kickOverlay.Visible = false
-kickOverlay.ZIndex = 999
-
-local kickBox = Instance.new("Frame", kickOverlay)
-kickBox.Size = UDim2.new(0, 400, 0, 150)
-kickBox.Position = UDim2.new(0.5, -200, 0.5, -75)
-kickBox.BackgroundColor3 = Color3.fromRGB(20, 5, 5)
-kickBox.BorderSizePixel = 0
-Instance.new("UICorner", kickBox).CornerRadius = UDim.new(0, 8)
-local kbStroke = Instance.new("UIStroke", kickBox)
-kbStroke.Color = Color3.fromRGB(255, 0, 0)
-kbStroke.Thickness = 2
-
-local kickTitle = Instance.new("TextLabel", kickBox)
-kickTitle.Size = UDim2.new(1, 0, 0, 40)
-kickTitle.BackgroundTransparency = 1
-kickTitle.Text = "⚠ CONNECTION LOST"
-kickTitle.TextColor3 = Color3.fromRGB(255, 50, 50)
-kickTitle.Font = Enum.Font.GothamBlack
-kickTitle.TextSize = 20
-
-local kickReason = Instance.new("TextLabel", kickBox)
-kickReason.Size = UDim2.new(1, -20, 0, 40)
-kickReason.Position = UDim2.new(0, 10, 0, 40)
-kickReason.BackgroundTransparency = 1
-kickReason.Text = "You have been kicked from the server."
-kickReason.TextColor3 = Color3.fromRGB(200, 200, 200)
-kickReason.Font = Enum.Font.GothamMedium
-kickReason.TextSize = 14
-
-local kickTimer = Instance.new("TextLabel", kickBox)
-kickTimer.Size = UDim2.new(1, 0, 0, 30)
-kickTimer.Position = UDim2.new(0, 0, 1, -40)
-kickTimer.BackgroundTransparency = 1
-kickTimer.Text = "Reconnecting in 5..."
-kickTimer.TextColor3 = Color3.fromRGB(255, 100, 100)
-kickTimer.Font = Enum.Font.Code
-kickTimer.TextSize = 16
-
-function showKickWarning(reason)
-    kickReason.Text = reason or "Unknown reason"
-    kickOverlay.Visible = true
-    kickOverlay.BackgroundTransparency = 1
-    TweenService:Create(kickOverlay, TweenInfo.new(0.5), {BackgroundTransparency = 0.85}):Play()
-    for i = 5, 1, -1 do
-        kickTimer.Text = string.format("Reconnecting in %d...", i)
-        task.wait(1)
-    end
-    kickTimer.Text = "Reconnecting..."
-    task.wait(1)
-    kickOverlay.Visible = false
-end
-
--- ============================================================
--- KEYBIND HINT
--- ============================================================
-
-local keybindHint = Instance.new("Frame", _G.sg)
-keybindHint.Size = UDim2.new(0, 180, 0, 40)
-keybindHint.Position = UDim2.new(1, -190, 1, -50)
-keybindHint.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-keybindHint.BackgroundTransparency = 1
-keybindHint.Visible = false
-keybindHint.ZIndex = 100
-Instance.new("UICorner", keybindHint).CornerRadius = UDim.new(0, 8)
-local khStroke = Instance.new("UIStroke", keybindHint)
-khStroke.Color = Color3.fromRGB(60, 60, 65)
-khStroke.Thickness = 1
-
-local khKey = Instance.new("TextLabel", keybindHint)
-khKey.Size = UDim2.new(0, 30, 0, 24)
-khKey.Position = UDim2.new(0, 8, 0.5, -12)
-khKey.BackgroundColor3 = Color3.fromRGB(114, 9, 183)
-khKey.Text = "B"
-khKey.TextColor3 = Color3.fromRGB(255, 255, 255)
-khKey.Font = Enum.Font.GothamBold
-khKey.TextSize = 12
-Instance.new("UICorner", khKey).CornerRadius = UDim.new(0, 4)
-
-local khAction = Instance.new("TextLabel", keybindHint)
-khAction.Size = UDim2.new(1, -45, 1, 0)
-khAction.Position = UDim2.new(0, 45, 0, 0)
-khAction.BackgroundTransparency = 1
-khAction.Text = "Fly Activated"
-khAction.TextColor3 = Color3.fromRGB(240, 240, 245)
-khAction.Font = Enum.Font.GothamMedium
-khAction.TextSize = 12
-khAction.TextXAlignment = Enum.TextXAlignment.Left
-
-function showKeybindHint(keyName, actionName)
-    khKey.Text = keyName
-    khAction.Text = actionName
-    keybindHint.Visible = true
-    keybindHint.BackgroundTransparency = 1
-    keybindHint.Position = UDim2.new(1, -190, 1, -30)
-    TweenService:Create(keybindHint, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        BackgroundTransparency = 0,
-        Position = UDim2.new(1, -190, 1, -50)
-    }):Play()
-    task.delay(2, function()
-        TweenService:Create(keybindHint, TweenInfo.new(0.3), {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(1, -190, 1, -70)
-        }):Play()
-        task.wait(0.3)
-        keybindHint.Visible = false
-    end)
-end
-
--- ============================================================
--- УЛУЧШЕННЫЕ ТОСТЫ
--- ============================================================
-
-local toastContainer = Instance.new("Frame", _G.sg)
-toastContainer.Size = UDim2.new(0, 220, 1, -20)
-toastContainer.Position = UDim2.new(1, -230, 0, 50)
-toastContainer.BackgroundTransparency = 1
-toastContainer.ZIndex = 50
-
-local toastList = Instance.new("UIListLayout", toastContainer)
-toastList.Padding = UDim.new(0, 8)
-toastList.HorizontalAlignment = Enum.HorizontalAlignment.Right
-toastList.SortOrder = Enum.SortOrder.LayoutOrder
-toastList.VerticalAlignment = Enum.VerticalAlignment.Bottom
-
-function showToast(type, titleText, descText)
-    local toast = Instance.new("Frame", toastContainer)
-    toast.Size = UDim2.new(1, 0, 0, 60)
-    toast.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
-    toast.BorderSizePixel = 0
-    toast.LayoutOrder = 1
-    toast.ZIndex = 51
-    Instance.new("UICorner", toast).CornerRadius = UDim.new(0, 6)
-    
-    local tStroke = Instance.new("UIStroke", toast)
-    tStroke.Color = Color3.fromRGB(40, 40, 45)
-    tStroke.Thickness = 1
-    
-    local accentColor = Color3.fromRGB(0, 102, 204)
-    local icon = ""
-    if type == "success" then accentColor = Color3.fromRGB(40, 167, 69); icon = "✓"
-    elseif type == "warning" then accentColor = Color3.fromRGB(220, 150, 0); icon = "⚠"
-    elseif type == "error" then accentColor = Color3.fromRGB(220, 53, 69); icon = "✕"
-    end
-    
-    local accentBar = Instance.new("Frame", toast)
-    accentBar.Size = UDim2.new(0, 4, 1, -10)
-    accentBar.Position = UDim2.new(0, 5, 0, 5)
-    accentBar.BackgroundColor3 = accentColor
-    accentBar.BorderSizePixel = 0
-    Instance.new("UICorner", accentBar).CornerRadius = UDim.new(0, 2)
-    
-    local tIcon = Instance.new("TextLabel", toast)
-    tIcon.Size = UDim2.new(0, 20, 0, 20)
-    tIcon.Position = UDim2.new(0, 15, 0, 10)
-    tIcon.BackgroundTransparency = 1
-    tIcon.Text = icon
-    tIcon.TextColor3 = accentColor
-    tIcon.Font = Enum.Font.GothamBold
-    tIcon.TextSize = 14
-    
-    local tT = Instance.new("TextLabel", toast)
-    tT.Size = UDim2.new(1, -45, 0, 20)
-    tT.Position = UDim2.new(0, 40, 0, 8)
-    tT.BackgroundTransparency = 1
-    tT.Text = titleText
-    tT.TextColor3 = Color3.fromRGB(255, 255, 255)
-    tT.Font = Enum.Font.GothamBold
-    tT.TextSize = 12
-    tT.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local dT = Instance.new("TextLabel", toast)
-    dT.Size = UDim2.new(1, -45, 0, 20)
-    dT.Position = UDim2.new(0, 40, 0, 28)
-    dT.BackgroundTransparency = 1
-    dT.Text = descText
-    dT.TextColor3 = Color3.fromRGB(160, 160, 165)
-    dT.Font = Enum.Font.GothamMedium
-    dT.TextSize = 10
-    dT.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local progressBar = Instance.new("Frame", toast)
-    progressBar.Size = UDim2.new(1, -10, 0, 2)
-    progressBar.Position = UDim2.new(0, 5, 1, -4)
-    progressBar.BackgroundColor3 = accentColor
-    progressBar.BorderSizePixel = 0
-    Instance.new("UICorner", progressBar).CornerRadius = UDim.new(0, 1)
-    
-    toast.Position = UDim2.new(1, 20, 0, 0)
-    TweenService:Create(toast, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = UDim2.new(1, 0, 0, 0)
-    }):Play()
-    
-    TweenService:Create(progressBar, TweenInfo.new(2.5, Enum.EasingStyle.Linear), {
-        Size = UDim2.new(0, 0, 0, 2)
-    }):Play()
-    
-    task.delay(2.5, function()
-        TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
-            Position = UDim2.new(1, 20, 0, 0),
-            BackgroundTransparency = 1
-        }):Play()
-        task.wait(0.3)
-        toast:Destroy()
-    end)
-end
-
--- ============================================================
--- ADLEX RECOGNITION (СКРЫТЫЙ)
--- ============================================================
-
-local ADLEX_MARKER_NAME = "_AdlexMarker_"
-local ADLEX_TAG_NAME = "AdlexTag_Local"
-local adlexUsers = {}
-
-local function createInvisibleMarker(character)
-    if not character then return end
-    local old = character:FindFirstChild(ADLEX_MARKER_NAME)
-    if old then old:Destroy() end
-    local marker = Instance.new("Part")
-    marker.Name = ADLEX_MARKER_NAME
-    marker.Size = Vector3.new(0.1, 0.1, 0.1)
-    marker.Transparency = 1
-    marker.CanCollide = false
-    marker.Anchored = true
-    marker.Parent = character
-    local head = character:FindFirstChild("Head")
-    if head then marker.CFrame = head.CFrame + Vector3.new(0, 3, 0) end
-    marker:SetAttribute("AdlexUser", true)
-    marker:SetAttribute("Version", "2.6")
-end
-
-local function createLocalTag(player)
-    if not player or not player.Character then return end
-    local old = player.Character:FindFirstChild(ADLEX_TAG_NAME)
-    if old then old:Destroy() end
-    local head = player.Character:FindFirstChild("Head")
-    if not head then return end
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = ADLEX_TAG_NAME
-    billboard.Adornee = head
-    billboard.Parent = player.Character
-    billboard.Size = UDim2.new(0, 120, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3.5, 0)
-    billboard.AlwaysOnTop = true
-    billboard.LightInfluence = 0
-    billboard.ResetOnSpawn = false
-    billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    local frame = Instance.new("Frame", billboard)
-    frame.Size = UDim2.new(1, 0, 1, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
-    frame.BackgroundTransparency = 0.2
-    frame.BorderSizePixel = 0
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-    local stroke = Instance.new("UIStroke", frame)
-    stroke.Color = Color3.fromRGB(114, 9, 183)
-    stroke.Thickness = 1.5
-    local logo = Instance.new("TextLabel", frame)
-    logo.Size = UDim2.new(0, 25, 1, 0)
-    logo.BackgroundTransparency = 1
-    logo.Text = "A"
-    logo.TextColor3 = Color3.fromRGB(114, 9, 183)
-    logo.Font = Enum.Font.GothamBlack
-    logo.TextSize = 18
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1, -25, 0, 20)
-    label.Position = UDim2.new(0, 25, 0, 2)
-    label.BackgroundTransparency = 1
-    label.Text = "ADLEX"
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 14
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    local version = Instance.new("TextLabel", frame)
-    version.Size = UDim2.new(1, -25, 0, 14)
-    version.Position = UDim2.new(0, 25, 0, 20)
-    version.BackgroundTransparency = 1
-    version.Text = "v2.6 • Active"
-    version.TextColor3 = Color3.fromRGB(40, 167, 69)
-    version.Font = Enum.Font.Code
-    version.TextSize = 9
-    version.TextXAlignment = Enum.TextXAlignment.Left
-    local statusDot = Instance.new("Frame", frame)
-    statusDot.Size = UDim2.new(0, 6, 0, 6)
-    statusDot.Position = UDim2.new(1, -12, 0.5, -3)
-    statusDot.BackgroundColor3 = Color3.fromRGB(40, 167, 69)
-    statusDot.BorderSizePixel = 0
-    Instance.new("UICorner", statusDot).CornerRadius = UDim.new(1, 0)
-    task.spawn(function()
-        while billboard and billboard.Parent do
-            TweenService:Create(statusDot, TweenInfo.new(0.8), {
-                BackgroundTransparency = 0.7,
-                Size = UDim2.new(0, 10, 0, 10),
-                Position = UDim2.new(1, -14, 0.5, -5)
-            }):Play()
-            task.wait(0.8)
-            TweenService:Create(statusDot, TweenInfo.new(0.8), {
-                BackgroundTransparency = 0,
-                Size = UDim2.new(0, 6, 0, 6),
-                Position = UDim2.new(1, -12, 0.5, -3)
-            }):Play()
-            task.wait(0.8)
-        end
-    end)
-end
-
-local function scanForAdlexUsers()
-    for _, player in ipairs(P:GetPlayers()) do
-        if player ~= _G.lp and player.Character then
-            local marker = player.Character:FindFirstChild(ADLEX_MARKER_NAME)
-            if marker and marker:GetAttribute("AdlexUser") == true and not adlexUsers[player.UserId] then
-                adlexUsers[player.UserId] = true
-                showToast("success", "Adlex User Detected", player.Name .. " тоже использует Adlex!")
-                createLocalTag(player)
-                local hl = player.Character:FindFirstChildOfClass("Highlight")
-                if hl then hl.OutlineColor = Color3.fromRGB(114, 9, 183) end
-            elseif not marker and adlexUsers[player.UserId] then
-                adlexUsers[player.UserId] = nil
-                local tag = player.Character:FindFirstChild(ADLEX_TAG_NAME)
-                if tag then tag:Destroy() end
-            end
-        end
-    end
-end
-
-local function setupSelfMarker()
-    if _G.lp.Character then createInvisibleMarker(_G.lp.Character) end
-    _G.lp.CharacterAdded:Connect(function(char)
-        char:WaitForChild("Head", 5)
-        task.wait(0.5)
-        createInvisibleMarker(char)
-    end)
-end
-
-task.spawn(function()
-    while task.wait(3) do scanForAdlexUsers() end
-end)
-
-P.PlayerRemoving:Connect(function(player)
-    if adlexUsers[player.UserId] then adlexUsers[player.UserId] = nil end
-end)
-
--- ============================================================
--- ОСНОВНОЙ GUI
--- ============================================================
 
 _G.mf = Instance.new("Frame", _G.sg)
 _G.mf.Size = UDim2.new(0, 520, 0, 300)
@@ -627,7 +56,6 @@ for i, l in ipairs(letters) do
     lbl.Font = Enum.Font.GothamBold
     lbl.BackgroundTransparency = 1
     lbl.TextTransparency = 1
-    table.insert(_G.logoLabels, lbl)
     task.spawn(function()
         task.wait(0.2 * i)
         TweenService:Create(lbl, TweenInfo.new(0.6), {TextTransparency = 0}):Play()
@@ -640,12 +68,8 @@ _G.ca.Position = UDim2.new(0, 165, 0, 10)
 _G.ca.BackgroundTransparency = 1
 
 _G.mf.Position = UDim2.new(0.5, -260, 0.3, -150)
-TweenService:Create(_G.mf, TweenInfo.new(0.6, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out), {
-    Position = UDim2.new(0.5, -260, 0.5, -150),
-    BackgroundTransparency = 0
-}):Play()
+TweenService:Create(_G.mf, TweenInfo.new(0.6, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, -260, 0.5, -150), BackgroundTransparency = 0}):Play()
 
--- Tooltip
 local tooltipLabel = Instance.new("TextLabel", _G.sg)
 tooltipLabel.Size = UDim2.new(0, 180, 0, 25)
 tooltipLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
@@ -670,7 +94,6 @@ local function showTooltip(text)
 end
 local function hideTooltip() tooltipLabel.Visible = false end
 
--- Конструктор кнопок
 function _G.cBtn(parent, text, pos, size, color, tooltipText)
     local b = Instance.new("TextButton", parent)
     b.Size, b.Position, b.BackgroundColor3, b.Text = size, pos, color, text
@@ -679,10 +102,7 @@ function _G.cBtn(parent, text, pos, size, color, tooltipText)
     local stroke = Instance.new("UIStroke", b)
     stroke.Color, stroke.Thickness, stroke.Enabled = Color3.fromRGB(255, 255, 255), 1.5, false
     b.MouseEnter:Connect(function()
-        TweenService:Create(b, TweenInfo.new(0.2), {
-            Size = UDim2.new(size.X.Scale, size.X.Offset + 4, size.Y.Scale, size.Y.Offset + 4),
-            Position = UDim2.new(pos.X.Scale, pos.X.Offset - 2, pos.Y.Scale, pos.Y.Offset - 2)
-        }):Play()
+        TweenService:Create(b, TweenInfo.new(0.2), {Size = UDim2.new(size.X.Scale, size.X.Offset + 4, size.Y.Scale, size.Y.Offset + 4), Position = UDim2.new(pos.X.Scale, pos.X.Offset - 2, pos.Y.Scale, pos.Y.Offset - 2)}):Play()
         if tooltipText then showTooltip(tooltipText) end
     end)
     b.MouseLeave:Connect(function()
@@ -698,73 +118,66 @@ function _G.cBtn(parent, text, pos, size, color, tooltipText)
         ripple.BackgroundTransparency = 0.6
         ripple.Position = UDim2.new(0, relativeX, 0, relativeY)
         Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
-        TweenService:Create(ripple, TweenInfo.new(0.4), {
-            Size = UDim2.new(0, size.X.Offset * 2.5, 0, size.X.Offset * 2.5),
-            Position = UDim2.new(0, relativeX - size.X.Offset * 1.25, 0, relativeY - size.X.Offset * 1.25),
-            BackgroundTransparency = 1
-        }):Play()
-        Debris:AddItem(ripple, 0.4)
+        TweenService:Create(ripple, TweenInfo.new(0.4), {Size = UDim2.new(0, size.X.Offset * 2.5, 0, size.X.Offset * 2.5), Position = UDim2.new(0, relativeX - size.X.Offset * 1.25, 0, relativeY - size.X.Offset * 1.25), BackgroundTransparency = 1}):Play()
+        game:GetService("Debris"):AddItem(ripple, 0.4)
     end)
     return b, stroke
 end
 
--- Вкладки
 function _G.addTab(name, title)
-    local count = 0
-    for _ in pairs(_G.tabs) do count = count + 1 end
+    local count = 0 for _ in pairs(_G.tabs) do count = count + 1 end
     local b = _G.cBtn(_G.sb, "  "..name, UDim2.new(0, 10, 0, 60 + count * 40), UDim2.new(1, -20, 0, 35), Color3.fromRGB(22, 22, 26))
     b.TextColor3, b.TextXAlignment, b.Font = Color3.fromRGB(150, 150, 155), 0, Enum.Font.GothamMedium
-    local f = Instance.new("Frame", _G.ca)
-    f.Size, f.BackgroundTransparency, f.Visible = UDim2.new(1, 0, 1, 0), 1, false
-    local t = Instance.new("TextLabel", f)
-    t.Size, t.BackgroundTransparency, t.Text = UDim2.new(1, 0, 0, 30), 1, string.upper(title)
+    local f = Instance.new("Frame", _G.ca) f.Size, f.BackgroundTransparency, f.Visible = UDim2.new(1, 0, 1, 0), 1, false
+    local t = Instance.new("TextLabel", f) t.Size, t.BackgroundTransparency, t.Text = UDim2.new(1, 0, 0, 30), 1, string.upper(title)
     t.TextColor3, t.TextSize, t.Font, t.TextXAlignment = Color3.fromRGB(130, 130, 135), 11, Enum.Font.GothamBold, Enum.TextXAlignment.Left
     _G.tabs[name] = {b = b, f = f, name = name}
     b.MouseButton1Click:Connect(function()
-        for _, v in pairs(_G.tabs) do
-            v.f.Visible, v.b.BackgroundColor3, v.b.TextColor3 = false, _G.sb.BackgroundColor3, Color3.fromRGB(150, 150, 155)
-        end
+        for _, v in pairs(_G.tabs) do v.f.Visible, v.b.BackgroundColor3, v.b.TextColor3 = false, _G.sb.BackgroundColor3, Color3.fromRGB(150, 150, 155) end
         f.Visible, b.BackgroundColor3, b.TextColor3, _G.curTab = true, Color3.fromRGB(42, 42, 48), Color3.fromRGB(255, 255, 255), name
     end)
-    if not _G.curTab then
-        f.Visible, b.BackgroundColor3, b.TextColor3, _G.curTab = true, Color3.fromRGB(42, 42, 48), Color3.fromRGB(255, 255, 255), name
-    end
-    return f
+    if not _G.curTab then f.Visible, b.BackgroundColor3, b.TextColor3, _G.curTab = true, Color3.fromRGB(42, 42, 48), Color3.fromRGB(255, 255, 255), name end return f
 end
 
--- Drag система
 local drag, dInp, dragStart, startPos
 _G.mf.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 then
-        drag = true
-        dragStart = i.Position
-        startPos = _G.mf.Position
-        i.Changed:Connect(function()
-            if i.UserInputState == Enum.UserInputState.End then drag = false end
-        end)
+        drag = true dragStart = i.Position startPos = _G.mf.Position
+        i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then drag = false end end)
     end
 end)
-_G.mf.InputChanged:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseMovement then dInp = i end
-end)
-U.InputChanged:Connect(function(i)
-    if i == dInp and drag then
-        local d = i.Position - dragStart
-        _G.mf.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + d.X,
-            startPos.Y.Scale, startPos.Y.Offset + d.Y
-        )
-    end
-end)
+_G.mf.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement then dInp = i end end)
+U.InputChanged:Connect(function(i) if i == dInp and drag then local d = i.Position - dragStart _G.mf.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y) end end)
 
--- Создание вкладок
 _G.p1 = _G.addTab("Coordinates", "Position Computation")
 _G.p2 = _G.addTab("Teleportation", "Vector3 Matrix Teleport")
-_G.p3 = _G.addTab("Settings", "Interface Customization")
+_G.p3 = _G.addTab("Players", "Player Actions")
+_G.p4 = _G.addTab("Settings", "Interface Customization")
 
--- ============================================================
--- ВКЛАДКА COORDINATES
--- ============================================================
+local wmFrame = Instance.new("Frame", _G.sg)
+wmFrame.Size = UDim2.new(0, 240, 0, 25)
+wmFrame.Position = UDim2.new(1, -250, 0, 10)
+wmFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+wmFrame.BorderSizePixel = 0
+Instance.new("UICorner", wmFrame).CornerRadius = UDim.new(0, 4)
+local wmStroke = Instance.new("UIStroke", wmFrame)
+wmStroke.Color = Color3.fromRGB(40, 40, 45)
+wmStroke.Thickness = 1
+local wmText = Instance.new("TextLabel", wmFrame)
+wmText.Size = UDim2.new(1, -10, 1, 0)
+wmText.Position = UDim2.new(0, 10, 0, 0)
+wmText.BackgroundTransparency = 1
+wmText.TextColor3 = Color3.fromRGB(240, 240, 245)
+wmText.Font = Enum.Font.Code
+wmText.TextSize = 11
+wmText.TextXAlignment = Enum.TextXAlignment.Left
+task.spawn(function()
+    while task.wait(1) do
+        if wmText then
+            wmText.Text = "Adlex.lua | " .. os.date("%d.%m.%Y - %X")
+        end
+    end
+end)
 
 _G.disp = Instance.new("TextLabel", _G.p1)
 _G.disp.Size = UDim2.new(1, -15, 0, 110)
@@ -777,62 +190,22 @@ _G.disp.LineHeight = 1.4
 _G.disp.TextXAlignment = Enum.TextXAlignment.Left
 Instance.new("UICorner", _G.disp).CornerRadius = UDim.new(0, 5)
 
-local bx = _G.cBtn(_G.p1, "Copy X", UDim2.new(0, 0, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Copy X")
-local by = _G.cBtn(_G.p1, "Copy Y", UDim2.new(0, 110, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Copy Y")
-local bz = _G.cBtn(_G.p1, "Copy Z", UDim2.new(0, 220, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Copy Z")
+local bx, bxStr = _G.cBtn(_G.p1, "Copy X", UDim2.new(0, 0, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Скопировать координату X")
+local by, byStr = _G.cBtn(_G.p1, "Copy Y", UDim2.new(0, 110, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Скопировать координату Y")
+local bz, bzStr = _G.cBtn(_G.p1, "Copy Z", UDim2.new(0, 220, 0, 165), UDim2.new(0, 100, 0, 35), Color3.fromRGB(0, 102, 204), "Скопировать координату Z")
+_G.bx, _G.by, _G.bz = bx, by, bz
 
-bx.MouseButton1Click:Connect(function()
-    if setclipboard then
-        setclipboard(tostring(_G.coords.x))
-        showToast("success", "Copied", "X: " .. _G.coords.x)
-    end
-end)
-by.MouseButton1Click:Connect(function()
-    if setclipboard then
-        setclipboard(tostring(_G.coords.y))
-        showToast("success", "Copied", "Y: " .. _G.coords.y)
-    end
-end)
-bz.MouseButton1Click:Connect(function()
-    if setclipboard then
-        setclipboard(tostring(_G.coords.z))
-        showToast("success", "Copied", "Z: " .. _G.coords.z)
-    end
-end)
+bx.MouseButton1Click:Connect(function() if setclipboard then setclipboard(tostring(_G.coords.x)) showToast("Copied", "X: " .. _G.coords.x) end end)
+by.MouseButton1Click:Connect(function() if setclipboard then setclipboard(tostring(_G.coords.y)) showToast("Copied", "Y: " .. _G.coords.y) end end)
+bz.MouseButton1Click:Connect(function() if setclipboard then setclipboard(tostring(_G.coords.z)) showToast("Copied", "Z: " .. _G.coords.z) end end)
 
-local fz = _G.cBtn(_G.p1, "Freeze: OFF", UDim2.new(0, 0, 0, 215), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Freeze")
+local fz, fzStr = _G.cBtn(_G.p1, "Freeze Character: OFF", UDim2.new(0, 0, 0, 215), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Заморозить положение персонажа")
 fz.TextColor3 = Color3.fromRGB(180, 180, 185)
+_G.fz, _G.fzStr = fz, fzStr
 
-local flb = _G.cBtn(_G.p1, "Fly: OFF [B]", UDim2.new(0, 170, 0, 215), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Fly")
+local flb, flbStr = _G.cBtn(_G.p1, "Fly: OFF [B]", UDim2.new(0, 170, 0, 215), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Активировать режим полета")
 flb.TextColor3 = Color3.fromRGB(180, 180, 185)
-
--- ============================================================
--- ВКЛАДКА TELEPORTATION
--- ============================================================
-
--- Валидация полей ввода
-local function validateCoordInput(textBox)
-    local function filterText()
-        local text = textBox.Text
-        local filtered = text:gsub("[^%d%-%+%.]", "")
-        filtered = filtered:gsub("%-%-", "-")
-        filtered = filtered:gsub("%+%+", "+")
-        filtered = filtered:gsub("%.%.", ".")
-        local dotCount = 0
-        local result = ""
-        for i = 1, #filtered do
-            local c = filtered:sub(i, i)
-            if c == "." then
-                dotCount = dotCount + 1
-                if dotCount > 1 then continue end
-            end
-            result = result .. c
-        end
-        if result ~= text then textBox.Text = result end
-    end
-    textBox:GetPropertyChangedSignal("Text"):Connect(filterText)
-    textBox.FocusLost:Connect(filterText)
-end
+_G.flb, _G.flbStr = flb, flbStr
 
 local function cInp(p, ph, pos, accentColor)
     local b = Instance.new("TextBox", p)
@@ -854,7 +227,6 @@ local function cInp(p, ph, pos, accentColor)
     indicator.BackgroundColor3 = accentColor
     indicator.BorderSizePixel = 0
     indicator.ZIndex = 6
-    validateCoordInput(b)
     return b
 end
 
@@ -862,53 +234,62 @@ _G.ix = cInp(_G.p2, "X", UDim2.new(0, 0, 0, 40), Color3.fromRGB(220, 53, 69))
 _G.iy = cInp(_G.p2, "Y", UDim2.new(0, 115, 0, 40), Color3.fromRGB(40, 167, 69))
 _G.iz = cInp(_G.p2, "Z", UDim2.new(0, 230, 0, 40), Color3.fromRGB(0, 102, 204))
 
-local tp = _G.cBtn(_G.p2, "Instant TP", UDim2.new(0, 0, 0, 95), UDim2.new(0, 160, 0, 35), Color3.fromRGB(114, 9, 183), "TP")
-local at = _G.cBtn(_G.p2, "Auto TP: OFF", UDim2.new(0, 170, 0, 95), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Auto TP")
+local tp, tpStr = _G.cBtn(_G.p2, "Instant Teleport", UDim2.new(0, 0, 0, 95), UDim2.new(0, 160, 0, 35), Color3.fromRGB(114, 9, 183), "Мгновенно переместиться")
+local at, atStr = _G.cBtn(_G.p2, "Auto Teleport: OFF", UDim2.new(0, 170, 0, 95), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Бесконечный авто-телепорт")
 at.TextColor3 = Color3.fromRGB(180, 180, 185)
+_G.tp, _G.at, _G.atStr = tp, at, atStr
 
-local noclipBtn = _G.cBtn(_G.p2, "Noclip: OFF", UDim2.new(0, 0, 0, 145), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Noclip")
+local noclipBtn, noclipStr = _G.cBtn(_G.p2, "Noclip Players: OFF", UDim2.new(0, 0, 0, 145), UDim2.new(0, 160, 0, 35), Color3.fromRGB(40, 40, 45), "Отключить коллизию игроков")
 noclipBtn.TextColor3 = Color3.fromRGB(180, 180, 185)
+_G.noclipBtn, _G.noclipStr = noclipBtn, noclipStr
 
 local function doTp()
     local r = _G.lp.Character and _G.lp.Character:FindFirstChild("HumanoidRootPart")
     if r then
-        local oA = r.Anchored
-        r.Anchored = false
-        r.CFrame = CFrame.new(
-            tonumber(_G.ix.Text) or 0,
-            tonumber(_G.iy.Text) or 0,
-            tonumber(_G.iz.Text) or 0
-        )
+        local oA = r.Anchored r.Anchored = false
+        r.CFrame = CFrame.new(tonumber(_G.ix.Text) or 0, tonumber(_G.iy.Text) or 0, tonumber(_G.iz.Text) or 0)
         if oA or _G.frz then task.wait() r.Anchored = true end
     end
 end
-tp.MouseButton1Click:Connect(doTp)
+_G.tp.MouseButton1Click:Connect(doTp)
 
-at.MouseButton1Click:Connect(function()
-    _G.isAuto = not _G.isAuto
-    at.Text = _G.isAuto and "Auto TP: ON" or "Auto TP: OFF"
-    at.BackgroundColor3 = _G.isAuto and Color3.fromRGB(30, 120, 50) or Color3.fromRGB(40, 40, 45)
-    at.TextColor3 = _G.isAuto and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
-    if _G.isAuto then
-        task.spawn(function()
-            while _G.isAuto do
-                doTp()
-                task.wait(0.1)
-            end
-        end)
-    end
+local function uAt(s)
+    _G.isAuto = s
+    _G.at.Text = _G.isAuto and "Auto Teleport: ON" or "Auto Teleport: OFF"
+    _G.at.BackgroundColor3 = _G.isAuto and Color3.fromRGB(40, 167, 69) or Color3.fromRGB(40, 40, 45)
+    _G.at.TextColor3 = _G.isAuto and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
+    _G.atStr.Enabled = _G.isAuto
+end
+_G.at.MouseButton1Click:Connect(function()
+    uAt(not _G.isAuto)
+    if _G.isAuto then task.spawn(function() while _G.isAuto do doTp() task.wait(0.1) end end) end
 end)
 
-noclipBtn.MouseButton1Click:Connect(function()
+_G.noclipBtn.MouseButton1Click:Connect(function()
     _G.noclippedPlayers = not _G.noclippedPlayers
-    noclipBtn.Text = _G.noclippedPlayers and "Noclip: ON" or "Noclip: OFF"
-    noclipBtn.BackgroundColor3 = _G.noclippedPlayers and Color3.fromRGB(30, 120, 50) or Color3.fromRGB(40, 40, 45)
-    noclipBtn.TextColor3 = _G.noclippedPlayers and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
+    _G.noclipBtn.Text = _G.noclippedPlayers and "Noclip Players: ON" or "Noclip Players: OFF"
+    _G.noclipBtn.BackgroundColor3 = _G.noclippedPlayers and Color3.fromRGB(40, 167, 69) or Color3.fromRGB(40, 40, 45)
+    _G.noclipBtn.TextColor3 = _G.noclippedPlayers and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
+    _G.noclipStr.Enabled = _G.noclippedPlayers
 end)
 
--- ============================================================
--- RENDERSTEPPED
--- ============================================================
+local function uFlV()
+    _G.flb.Text = "Fly: " .. (_G.flyActive and "ON" or "OFF") .. " [" .. _G.flyKey.Name .. "]"
+    _G.flb.BackgroundColor3 = _G.flyActive and Color3.fromRGB(40, 167, 69) or Color3.fromRGB(40, 40, 45)
+    _G.flb.TextColor3 = _G.flyActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
+    _G.flbStr.Enabled = _G.flyActive
+end
+
+local function tgFl()
+    local c = _G.lp.Character
+    local r = c and c:FindFirstChild("HumanoidRootPart")
+    if r then
+        _G.flyActive = not _G.flyActive uFlV()
+        if not _G.flyActive then r.Velocity = Vector3.new(0, 0, 0) end
+    end
+end
+_G.flb.MouseButton1Click:Connect(tgFl)
+_G.flb.MouseButton2Click:Connect(function() _G.flyBinding = true _G.bindOverlay.Visible = true end)
 
 local nUp = 0
 R.RenderStepped:Connect(function()
@@ -922,7 +303,6 @@ R.RenderStepped:Connect(function()
             _G.disp.Text = "  X: " .. _G.coords.x .. "\n  Y: " .. _G.coords.y .. "\n  Z: " .. _G.coords.z
         end
     end
-    
     if _G.noclippedPlayers and _G.lp.Character then
         local myRoot = _G.lp.Character:FindFirstChild("HumanoidRootPart")
         if myRoot then
@@ -936,48 +316,56 @@ R.RenderStepped:Connect(function()
             end
         end
     end
-    
-    local c = _G.lp.Character
-    local r = c and c:FindFirstChild("HumanoidRootPart")
+    local c = _G.lp.Character local r = c and c:FindFirstChild("HumanoidRootPart")
     if _G.flyActive and r then
-        local cam = workspace.CurrentCamera.CFrame
-        local m = Vector3.new(0, 0, 0)
+        local cam = workspace.CurrentCamera.CFrame local m = Vector3.new(0, 0, 0)
         if U:IsKeyDown(Enum.KeyCode.W) then m = m + cam.LookVector end
         if U:IsKeyDown(Enum.KeyCode.S) then m = m - cam.LookVector end
         if U:IsKeyDown(Enum.KeyCode.A) then m = m - cam.RightVector end
         if U:IsKeyDown(Enum.KeyCode.D) then m = m + cam.RightVector end
         if U:IsKeyDown(Enum.KeyCode.Space) then m = m + Vector3.new(0, 1, 0) end
         if U:IsKeyDown(Enum.KeyCode.LeftShift) then m = m - Vector3.new(0, 1, 0) end
-        if m.Magnitude ~= 0 then
-            r.Velocity = m.Unit * 50
-        else
-            r.Velocity = Vector3.new(0, 0.1, 0)
-        end
+        if m.Magnitude ~= 0 then r.Velocity = m.Unit * 50 else r.Velocity = Vector3.new(0, 0.1, 0) end
     end
 end)
 
--- Freeze
-fz.MouseButton1Click:Connect(function()
-    _G.frz = not _G.frz
-    fz.Text = _G.frz and "Freeze: ON" or "Freeze: OFF"
-    fz.BackgroundColor3 = _G.frz and Color3.fromRGB(160, 40, 50) or Color3.fromRGB(40, 40, 45)
-    fz.TextColor3 = _G.frz and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
-    local r = _G.lp.Character and _G.lp.Character:FindFirstChild("HumanoidRootPart")
+local function uFr(s)
+    _G.frz = s local r = _G.lp.Character and _G.lp.Character:FindFirstChild("HumanoidRootPart")
+    _G.fz.Text = _G.frz and "Freeze Character: ON" or "Freeze Character: OFF"
+    _G.fz.BackgroundColor3 = _G.frz and Color3.fromRGB(220, 53, 69) or Color3.fromRGB(40, 40, 45)
+    _G.fz.TextColor3 = _G.frz and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
+    _G.fzStr.Enabled = _G.frz
     if r then r.Anchored = _G.frz end
-end)
+end
+_G.fz.MouseButton1Click:Connect(function() uFr(not _G.frz) end)
 
 _G.lp.CharacterAdded:Connect(function(c)
-    if _G.frz then
-        local r = c:WaitForChild("HumanoidRootPart", 5)
-        if r then r.Anchored = true end
-    end
-    if _G.flyActive then
-        _G.flyActive = false
-        uFlV()
+    if _G.frz then local r = c:WaitForChild("HumanoidRootPart", 5) if r then r.Anchored = true end end
+    if _G.flyActive then _G.flyActive = false uFlV() end
+    -- Остановка флинга при респавне
+    if _G.walkflinging then
+        stopWalkFling()
     end
 end)
 
--- Chams
+local function showToast(titleText, descText)
+    local toast = Instance.new("Frame", _G.sg)
+    toast.Size = UDim2.new(0, 200, 0, 50)
+    toast.Position = UDim2.new(1, 20, 1, -60)
+    toast.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    Instance.new("UICorner", toast).CornerRadius = UDim.new(0, 5)
+    local tS = Instance.new("UIStroke", toast) tS.Color = Color3.fromRGB(50, 50, 55)
+    local tT = Instance.new("TextLabel", toast) tT.Size = UDim2.new(1, -10, 0, 20) tT.Position = UDim2.new(0, 10, 0, 5) tT.Text = titleText tT.TextColor3 = Color3.fromRGB(255, 255, 255) tT.Font = Enum.Font.GothamBold tT.TextSize = 12 tT.BackgroundTransparency, tT.TextXAlignment = 1, 0
+    local dT = Instance.new("TextLabel", toast) dT.Size = UDim2.new(1, -10, 0, 20) dT.Position = UDim2.new(0, 10, 0, 22) dT.Text = descText dT.TextColor3 = Color3.fromRGB(160, 160, 165) dT.Font = Enum.Font.GothamMedium dT.TextSize = 10 dT.BackgroundTransparency, dT.TextXAlignment = 1, 0
+    TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(1, -220, 1, -60)}):Play()
+    task.delay(2.5, function()
+        if toast then
+            TweenService:Create(toast, TweenInfo.new(0.3), {Position = UDim2.new(1, 20, 1, -60), BackgroundTransparency = 1}):Play()
+            game:GetService("Debris"):AddItem(toast, 0.3)
+        end
+    end)
+end
+
 local function applyChams(player)
     if player == _G.lp then return end
     local function setup(char)
@@ -995,182 +383,273 @@ end
 for _, pl in pairs(P:GetPlayers()) do applyChams(pl) end
 P.PlayerAdded:Connect(applyChams)
 
--- Fly
-local function uFlV()
-    flb.Text = "Fly: " .. (_G.flyActive and "ON" or "OFF") .. " [" .. _G.flyKey.Name .. "]"
-    flb.BackgroundColor3 = _G.flyActive and Color3.fromRGB(30, 120, 50) or Color3.fromRGB(40, 40, 45)
-    flb.TextColor3 = _G.flyActive and Color3.fromRGB(220, 220, 225) or Color3.fromRGB(180, 180, 185)
-end
+-- ============================================================
+-- ВКЛАДКА PLAYERS С WALKFLING
+-- ============================================================
 
-local function tgFl()
-    local c = _G.lp.Character
-    local r = c and c:FindFirstChild("HumanoidRootPart")
-    if r then
-        _G.flyActive = not _G.flyActive
-        uFlV()
-        if not _G.flyActive then r.Velocity = Vector3.new(0, 0, 0) end
+-- Заголовок
+local playersTitle = Instance.new("TextLabel", _G.p3)
+playersTitle.Size = UDim2.new(1, -10, 0, 25)
+playersTitle.Position = UDim2.new(0, 5, 0, 35)
+playersTitle.BackgroundTransparency = 1
+playersTitle.Text = "Выберите игрока для Fling:"
+playersTitle.TextColor3 = Color3.fromRGB(200, 200, 205)
+playersTitle.Font = Enum.Font.GothamBold
+playersTitle.TextSize = 12
+playersTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Кнопка обновления
+local refreshBtn = _G.cBtn(_G.p3, "Обновить", UDim2.new(1, -110, 0, 35), UDim2.new(0, 100, 0, 25), Color3.fromRGB(0, 102, 204), "Обновить список")
+
+-- Список игроков
+local playersScroll = Instance.new("ScrollingFrame", _G.p3)
+playersScroll.Size = UDim2.new(1, -10, 0, 110)
+playersScroll.Position = UDim2.new(0, 5, 0, 65)
+playersScroll.BackgroundColor3 = Color3.fromRGB(28, 28, 33)
+playersScroll.BorderSizePixel = 0
+playersScroll.ScrollBarThickness = 5
+playersScroll.ScrollBarImageColor3 = Color3.fromRGB(114, 9, 183)
+playersScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+playersScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+playersScroll.ClipsDescendants = true
+Instance.new("UICorner", playersScroll).CornerRadius = UDim.new(0, 5)
+
+local playersList = Instance.new("UIListLayout", playersScroll)
+playersList.Padding = UDim.new(0, 2)
+
+-- Информация о выбранном
+local selectedInfo = Instance.new("TextLabel", _G.p3)
+selectedInfo.Size = UDim2.new(1, -10, 0, 22)
+selectedInfo.Position = UDim2.new(0, 5, 0, 180)
+selectedInfo.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+selectedInfo.Text = "  Выбран: Никто"
+selectedInfo.TextColor3 = Color3.fromRGB(180, 180, 185)
+selectedInfo.Font = Enum.Font.GothamMedium
+selectedInfo.TextSize = 11
+selectedInfo.TextXAlignment = Enum.TextXAlignment.Left
+Instance.new("UICorner", selectedInfo).CornerRadius = UDim.new(0, 4)
+
+-- Кнопка FLING (серая)
+local flingBtn = _G.cBtn(_G.p3, "FLING", UDim2.new(0, 5, 0, 207), UDim2.new(1, -10, 0, 35), Color3.fromRGB(80, 80, 85), "Запустить/Остановить WalkFling")
+
+local selectedPlayer = nil
+
+-- Функция обновления списка
+local function updatePlayersList()
+    for _, child in ipairs(playersScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    for _, player in ipairs(P:GetPlayers()) do
+        if player ~= _G.lp then
+            local playerBtn = Instance.new("TextButton", playersScroll)
+            playerBtn.Size = UDim2.new(1, -10, 0, 26)
+            playerBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            playerBtn.Text = "  " .. player.Name
+            playerBtn.TextColor3 = Color3.fromRGB(220, 220, 225)
+            playerBtn.Font = Enum.Font.GothamMedium
+            playerBtn.TextSize = 12
+            playerBtn.TextXAlignment = Enum.TextXAlignment.Left
+            Instance.new("UICorner", playerBtn).CornerRadius = UDim.new(0, 4)
+            
+            playerBtn.MouseButton1Click:Connect(function()
+                selectedPlayer = player
+                selectedInfo.Text = "  Выбран: " .. player.Name
+                selectedInfo.TextColor3 = Color3.fromRGB(40, 167, 69)
+            end)
+        end
     end
 end
-flb.MouseButton1Click:Connect(tgFl)
-flb.MouseButton2Click:Connect(function()
-    _G.flyBinding = true
-    showToast("info", "Binding", "Нажмите клавишу для полёта")
+
+refreshBtn.MouseButton1Click:Connect(function()
+    updatePlayersList()
+    showToast("Обновлено", "Список игроков")
 end)
 
+-- WALKFLING ФУНКЦИЯ (из предоставленного кода)
+local function startWalkFling(char)
+    local Root = char:WaitForChild("HumanoidRootPart")
+    local Humanoid = char:WaitForChild("Humanoid")
+
+    -- Godmode setup
+    Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    Humanoid.BreakJointsOnDeath = false
+
+    -- Keep health maxed
+    local healthConn = R.Stepped:Connect(function()
+        Humanoid.Health = math.huge
+        Humanoid.MaxHealth = math.huge
+    end)
+    table.insert(_G.flingConnections, healthConn)
+
+    _G.walkflinging = true
+    Root.CanCollide = false
+    Humanoid:ChangeState(11)
+
+    task.spawn(function()
+        while _G.walkflinging and Root and Root.Parent do
+            R.Heartbeat:Wait()
+            local vel = Root.Velocity
+            Root.Velocity = vel * 99999999 + Vector3.new(0, 99999999, 0)
+            R.RenderStepped:Wait()
+            Root.Velocity = vel
+            R.Stepped:Wait()
+            Root.Velocity = vel + Vector3.new(0, 0.1, 0)
+        end
+    end)
+end
+
+-- Функция остановки WalkFling
+local function stopWalkFling()
+    _G.walkflinging = false
+    
+    -- Отключаем все соединения
+    for _, conn in ipairs(_G.flingConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    _G.flingConnections = {}
+    
+    -- Возвращаем нормальные настройки
+    local char = _G.lp.Character
+    if char then
+        local Root = char:FindFirstChild("HumanoidRootPart")
+        local Humanoid = char:FindFirstChild("Humanoid")
+        if Root then
+            Root.CanCollide = true
+            Root.Velocity = Vector3.new(0, 0, 0)
+        end
+        if Humanoid then
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+            Humanoid.BreakJointsOnDeath = true
+            Humanoid.Health = 100
+            Humanoid.MaxHealth = 100
+        end
+    end
+    
+    -- Возвращаем кнопку
+    flingBtn.Text = "FLING"
+    flingBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 85)
+    
+    showToast("Fling", "Остановлен")
+end
+
+-- Обработчик кнопки FLING
+flingBtn.MouseButton1Click:Connect(function()
+    -- Если флинг активен - останавливаем
+    if _G.walkflinging then
+        stopWalkFling()
+        return
+    end
+    
+    -- Проверяем выбранного игрока
+    if not selectedPlayer then
+        showToast("Ошибка", "Сначала выберите игрока!")
+        return
+    end
+    
+    if not selectedPlayer.Parent then
+        selectedPlayer = nil
+        selectedInfo.Text = "  Выбран: Никто"
+        selectedInfo.TextColor3 = Color3.fromRGB(180, 180, 185)
+        return
+    end
+    
+    -- Меняем кнопку
+    flingBtn.Text = "STOP FLING"
+    flingBtn.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
+    
+    showToast("Fling", "Запущен на " .. selectedPlayer.Name)
+    
+    -- Запускаем walkfling на своём персонаже
+    if _G.lp.Character then
+        startWalkFling(_G.lp.Character)
+    end
+    
+    -- Телепортируемся к цели и держимся внутри
+    task.spawn(function()
+        while _G.walkflinging and selectedPlayer and selectedPlayer.Parent do
+            if selectedPlayer.Character then
+                local targetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local myRoot = _G.lp.Character and _G.lp.Character:FindFirstChild("HumanoidRootPart")
+                
+                if targetRoot and myRoot then
+                    -- Телепортируемся ТОЧНО в позицию игрока (внутри него)
+                    myRoot.CFrame = targetRoot.CFrame
+                end
+            end
+            R.Heartbeat:Wait()
+        end
+    end)
+end)
+
+-- Первоначальное заполнение списка
+task.delay(0.5, updatePlayersList)
+
 -- ============================================================
--- ВКЛАДКА SETTINGS (С СКРОЛЛИНГОМ)
+-- ВКЛАДКА SETTINGS
 -- ============================================================
 
--- Темы
 local Themes = {
-    Black = {bg = Color3.fromRGB(15, 15, 18), side = Color3.fromRGB(22, 22, 26), text = Color3.fromRGB(255, 255, 255), wmText = Color3.fromRGB(240, 240, 245), logoText = Color3.fromRGB(255, 255, 255)},
-    Gray = {bg = Color3.fromRGB(35, 35, 40), side = Color3.fromRGB(45, 45, 50), text = Color3.fromRGB(240, 240, 245), wmText = Color3.fromRGB(240, 240, 245), logoText = Color3.fromRGB(255, 255, 255)},
-    Light = {bg = Color3.fromRGB(240, 240, 245), side = Color3.fromRGB(225, 225, 230), text = Color3.fromRGB(20, 20, 25), wmText = Color3.fromRGB(20, 20, 25), logoText = Color3.fromRGB(20, 20, 25)}
+    Black = {bg = Color3.fromRGB(15, 15, 18), side = Color3.fromRGB(22, 22, 26), text = Color3.fromRGB(255, 255, 255)},
+    Gray = {bg = Color3.fromRGB(35, 35, 40), side = Color3.fromRGB(45, 45, 50), text = Color3.fromRGB(240, 240, 245)},
+    Light = {bg = Color3.fromRGB(240, 240, 245), side = Color3.fromRGB(225, 225, 230), text = Color3.fromRGB(20, 20, 25)}
 }
 local curTheme = Themes.Black
 
 local function uTheme()
-    _G.mf.BackgroundColor3 = curTheme.bg
-    _G.sb.BackgroundColor3 = curTheme.side
+    _G.mf.BackgroundColor3 = curTheme.bg _G.sb.BackgroundColor3 = curTheme.side
+    for _, v in pairs(_G.tabs) do if v.b then v.b.BackgroundColor3 = curTheme.side if _G.curTab == v.name then v.b.BackgroundColor3 = Color3.fromRGB(42,42,48) end end end
     wmFrame.BackgroundColor3 = curTheme.bg
-    wmText.TextColor3 = curTheme.wmText
-    -- Обновляем цвет логотипа ADLEX
-    if _G.logoLabels then
-        for _, lbl in ipairs(_G.logoLabels) do
-            lbl.TextColor3 = curTheme.logoText
-        end
-    end
-    for _, v in pairs(_G.tabs) do
-        if v.b then
-            v.b.BackgroundColor3 = curTheme.side
-            if _G.curTab == v.name then
-                v.b.BackgroundColor3 = Color3.fromRGB(42, 42, 48)
-            end
-        end
-    end
 end
 
-local function updateMenuKeyUI()
-    if _G.tabs["Settings"] and _G.tabs["Settings"].f then
-        local btn = _G.tabs["Settings"].f:FindFirstChild("MKeyBtn")
-        if btn then btn.Text = "Menu Key: [" .. _G.menuKey.Name .. "]" end
-    end
-end
+local function updateMenuKeyUI() _G.tabs["Settings"].f:FindFirstChild("MKeyBtn").Text = "Menu Key: [" .. _G.menuKey.Name .. "]" end
 
--- Скроллинг для Settings
-local settingsScroll = Instance.new("ScrollingFrame", _G.p3)
-settingsScroll.Size = UDim2.new(1, 0, 1, -10)
-settingsScroll.Position = UDim2.new(0, 0, 0, 10)
-settingsScroll.BackgroundTransparency = 1
-settingsScroll.BorderSizePixel = 0
-settingsScroll.ScrollBarThickness = 6
-settingsScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 85)
-settingsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-settingsScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-settingsScroll.ClipsDescendants = true
-
-local settingsLayout = Instance.new("UIListLayout", settingsScroll)
-settingsLayout.Padding = UDim.new(0, 8)
-settingsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
--- Dropdown тем
-local dropContainer = Instance.new("Frame", settingsScroll)
-dropContainer.Size = UDim2.new(0, 160, 0, 35)
-dropContainer.BackgroundColor3 = Color3.fromRGB(28, 28, 33)
-dropContainer.BorderSizePixel = 0
-dropContainer.ZIndex = 6
-dropContainer.LayoutOrder = 1
+local dropContainer = Instance.new("Frame", _G.p4)
+dropContainer.Size, dropContainer.Position, dropContainer.BackgroundColor3, dropContainer.BorderSizePixel, dropContainer.ZIndex = UDim2.new(0, 160, 0, 35), UDim2.new(0, 0, 0, 40), Color3.fromRGB(28, 28, 33), 0, 6
 Instance.new("UICorner", dropContainer).CornerRadius = UDim.new(0, 5)
-
 local dropMainBtn = Instance.new("TextButton", dropContainer)
-dropMainBtn.Size = UDim2.new(1, 0, 1, 0)
-dropMainBtn.BackgroundTransparency = 1
-dropMainBtn.Text = "Select Theme v"
-dropMainBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-dropMainBtn.Font = Enum.Font.GothamBold
-dropMainBtn.TextSize = 13
-dropMainBtn.ZIndex = 7
-
+dropMainBtn.Size, dropMainBtn.BackgroundTransparency, dropMainBtn.Text, dropMainBtn.TextColor3, dropMainBtn.Font, dropMainBtn.TextSize, dropMainBtn.ZIndex = UDim2.new(1, 0, 1, 0), 1, "Select Theme v", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 13, 7
 local dropListFrame = Instance.new("Frame", dropContainer)
-dropListFrame.Size = UDim2.new(1, 0, 0, 95)
-dropListFrame.Position = UDim2.new(0, 0, 1, 5)
-dropListFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-dropListFrame.BorderSizePixel = 0
-dropListFrame.Visible = false
-dropListFrame.ZIndex = 8
+dropListFrame.Size, dropListFrame.Position, dropListFrame.BackgroundColor3, dropListFrame.BorderSizePixel, dropListFrame.Visible, dropListFrame.ZIndex = UDim2.new(1, 0, 0, 95), UDim2.new(0, 0, 1, 5), Color3.fromRGB(24, 24, 28), 0, false, 8
 Instance.new("UICorner", dropListFrame).CornerRadius = UDim.new(0, 5)
-
-local dropListLayout = Instance.new("UIListLayout", dropListFrame)
-dropListLayout.Padding = UDim.new(0, 2)
+local dropListLayout = Instance.new("UIListLayout", dropListFrame) dropListLayout.Padding = UDim.new(0, 2)
 
 local function createDropElement(themeKey, displayName)
-    local b = _G.cBtn(dropListFrame, displayName, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 28), Color3.fromRGB(32, 32, 38))
+    local b, _ = _G.cBtn(dropListFrame, displayName, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 28), Color3.fromRGB(32, 32, 38))
     b.ZIndex = 9
-    b.MouseButton1Click:Connect(function()
-        curTheme = Themes[themeKey]
-        uTheme()
-        dropMainBtn.Text = displayName .. " v"
-        dropListFrame.Visible = false
-        showToast("success", "Theme Changed", "Новая тема применена")
-    end)
+    b.MouseButton1Click:Connect(function() curTheme = Themes[themeKey] uTheme() dropMainBtn.Text = displayName .. " v" dropListFrame.Visible = false showToast("Theme Changed", "Новая тема успешно применена") end)
 end
 createDropElement("Black", "Dark Theme")
 createDropElement("Gray", "Gray Theme")
 createDropElement("Light", "Light Theme")
-dropMainBtn.MouseButton1Click:Connect(function()
-    dropListFrame.Visible = not dropListFrame.Visible
-end)
+dropMainBtn.MouseButton1Click:Connect(function() dropListFrame.Visible = not dropListFrame.Visible end)
 
--- Прозрачность
 local function cInpLocal(p, ph, pos)
-    local b = Instance.new("TextBox", p)
-    b.Size = UDim2.new(0, 80, 0, 35)
-    b.Position = pos
-    b.BackgroundColor3 = Color3.fromRGB(28, 28, 33)
-    b.PlaceholderText = ph
-    b.Text = ""
-    b.TextColor3 = Color3.fromRGB(255, 255, 255)
-    b.PlaceholderColor3 = Color3.fromRGB(100, 100, 105)
-    b.TextSize = 14
-    b.Font = Enum.Font.Code
-    b.ClearTextOnFocus = false
-    b.ZIndex = 5
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-    return b
+    local b = Instance.new("TextBox", p) b.Size, b.Position, b.BackgroundColor3, b.PlaceholderText, b.Text, b.ZIndex = UDim2.new(0, 80, 0, 35), pos, Color3.fromRGB(28, 28, 33), ph, "", 5
+    b.TextColor3, b.PlaceholderColor3, b.TextSize, b.Font, b.ClearTextOnFocus = Color3.fromRGB(255, 255, 255), Color3.fromRGB(100, 100, 105), 14, Enum.Font.Code, false Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5) return b
 end
 
-local opacityFrame = Instance.new("Frame", settingsScroll)
-opacityFrame.Size = UDim2.new(0, 200, 0, 35)
-opacityFrame.BackgroundTransparency = 1
-opacityFrame.LayoutOrder = 2
-
-local opacityInput = cInpLocal(opacityFrame, "% (0-100)", UDim2.new(0, 0, 0, 0))
-local applyOpacityBtn = _G.cBtn(opacityFrame, "Set Opacity", UDim2.new(0, 90, 0, 0), UDim2.new(0, 110, 0, 35), Color3.fromRGB(0, 102, 204), "Set opacity")
+local opacityInput = cInpLocal(_G.p4, "% (0-100)", UDim2.new(0, 0, 0, 95))
+local applyOpacityBtn = _G.cBtn(_G.p4, "Set Opacity", UDim2.new(0, 90, 0, 95), UDim2.new(0, 110, 0, 35), Color3.fromRGB(0, 102, 204), "Установить прозрачность")
 applyOpacityBtn.MouseButton1Click:Connect(function()
     local number = tonumber(opacityInput.Text)
     if number then
         if number < 0 then number = 0 elseif number > 100 then number = 100 end
         local value = number / 100
-        _G.mf.BackgroundTransparency = value
-        _G.sb.BackgroundTransparency = value
-        showToast("success", "Opacity Set", "Прозрачность: " .. number .. "%")
+        _G.mf.BackgroundTransparency = value _G.sb.BackgroundTransparency = value
+        showToast("Opacity Set", "Прозрачность установлена на " .. number .. "%")
     else
-        opacityInput.Text = "Error"
-        task.wait(0.6)
-        opacityInput.Text = ""
+        opacityInput.Text = "Error" task.wait(0.6) opacityInput.Text = ""
     end
 end)
 
--- Chams color
-local chamsFrame = Instance.new("Frame", settingsScroll)
-chamsFrame.Size = UDim2.new(0, 260, 0, 35)
-chamsFrame.BackgroundTransparency = 1
-chamsFrame.LayoutOrder = 3
-
-local chamsInput = cInpLocal(chamsFrame, "R,G,B", UDim2.new(0, 0, 0, 0))
+local chamsInput = cInpLocal(_G.p4, "R,G,B", UDim2.new(0, 0, 0, 150))
 chamsInput.Size = UDim2.new(0, 110, 0, 35)
-local applyChamsBtn = _G.cBtn(chamsFrame, "Set Chams Color", UDim2.new(0, 120, 0, 0), UDim2.new(0, 140, 0, 35), Color3.fromRGB(0, 102, 204), "Set chams color")
+local applyChamsBtn = _G.cBtn(_G.p4, "Set Chams Color", UDim2.new(0, 120, 0, 150), UDim2.new(0, 140, 0, 35), Color3.fromRGB(0, 102, 204), "Изменить цвет подсветки игроков")
 applyChamsBtn.MouseButton1Click:Connect(function()
     local r, g, b = chamsInput.Text:match("(%d+),(%d+),(%d+)")
     if r and g and b then
@@ -1180,24 +659,15 @@ applyChamsBtn.MouseButton1Click:Connect(function()
                 pl.Character:FindFirstChildOfClass("Highlight").FillColor = _G.chamsColor
             end
         end
-        showToast("success", "Chams Updated", "Цвет обновлен")
+        showToast("Chams Updated", "Цвет подсветки успешно изменен")
     else
-        chamsInput.Text = "Format: 255,0,0"
-        task.wait(1.5)
-        chamsInput.Text = ""
+        chamsInput.Text = "Format: 255,0,0" task.wait(1.5) chamsInput.Text = ""
     end
 end)
 
--- Кнопка Menu Key
-local mkb = _G.cBtn(settingsScroll, "Menu Key: [Insert]", UDim2.new(0, 0, 0, 0), UDim2.new(0, 200, 0, 35), Color3.fromRGB(114, 9, 183), "Change menu key")
-mkb.Name = "MKeyBtn"
-mkb.LayoutOrder = 4
-mkb.MouseButton1Click:Connect(function()
-    _G.menuBinding = true
-    showToast("info", "Binding", "Нажмите клавишу для меню")
-end)
+local mkb = _G.cBtn(_G.p4, "Menu Key: [RightShift]", UDim2.new(0, 0, 0, 205), UDim2.new(0, 200, 0, 35), Color3.fromRGB(114, 9, 183), "Изменить кнопку меню") mkb.Name = "MKeyBtn"
+mkb.MouseButton1Click:Connect(function() _G.menuBinding = true _G.bindOverlay.Text = "Нажмите клавишу для закрытия меню..." _G.bindOverlay.Visible = true end)
 
--- Bind overlay
 _G.bindOverlay = Instance.new("Frame", _G.sg)
 _G.bindOverlay.Size = UDim2.new(0, 300, 0, 60)
 _G.bindOverlay.Position = UDim2.new(0.5, -150, 0.5, -30)
@@ -1210,49 +680,10 @@ local boStroke = Instance.new("UIStroke", _G.bindOverlay)
 boStroke.Color = Color3.fromRGB(80, 80, 90)
 boStroke.Thickness = 1
 
--- ============================================================
--- ОБРАБОТКА КЛАВИШ
--- ============================================================
-
 U.InputBegan:Connect(function(i, g)
-    if _G.flyBinding and i.KeyCode ~= Enum.KeyCode.Unknown and i.UserInputType == Enum.UserInputType.Keyboard then
-        _G.flyKey = i.KeyCode
-        _G.flyBinding = false
-        _G.bindOverlay.Visible = false
-        uFlV()
-        showToast("success", "Fly Key Set", "Клавиша: " .. _G.flyKey.Name)
-        return
-    end
-    if _G.menuBinding and i.KeyCode ~= Enum.KeyCode.Unknown and i.UserInputType == Enum.UserInputType.Keyboard then
-        _G.menuKey = i.KeyCode
-        _G.menuBinding = false
-        _G.bindOverlay.Visible = false
-        updateMenuKeyUI()
-        showToast("success", "Menu Key Set", "Клавиша: " .. _G.menuKey.Name)
-        return
-    end
-    if g then return end
-    if i.KeyCode == _G.flyKey then
-        tgFl()
-        showKeybindHint(_G.flyKey.Name, _G.flyActive and "Fly Activated" or "Fly Deactivated")
-    end
-    if i.KeyCode == _G.menuKey then
-        _G.mf.Visible = not _G.mf.Visible
-        showKeybindHint(_G.menuKey.Name, _G.mf.Visible and "Menu Opened" or "Menu Hidden")
-    end
+    if _G.flyBinding and i.KeyCode ~= Enum.KeyCode.Unknown and i.UserInputType == Enum.UserInputType.Keyboard then _G.flyKey = i.KeyCode _G.flyBinding = false _G.bindOverlay.Visible = false uFlV() return end
+    if _G.menuBinding and i.KeyCode ~= Enum.KeyCode.Unknown and i.UserInputType == Enum.UserInputType.Keyboard then _G.menuKey = i.KeyCode _G.menuBinding = false _G.bindOverlay.Visible = false updateMenuKeyUI() return end
+    if g then return end if i.KeyCode == _G.flyKey then tgFl() end if i.KeyCode == _G.menuKey then _G.mf.Visible = not _G.mf.Visible end
 end)
 
--- ============================================================
--- ЗАПУСК СИСТЕМ
--- ============================================================
-
-setupSelfMarker()
-
-local finalOk, finalFailed = runIntegrityChecks()
-if finalOk then
-    game:GetService("TestService"):Message("[Adlex]: Loaded | Fingerprint: " .. _G.ADLEX_FINGERPRINT)
-else
-    warn("[Adlex] Initial integrity check failed: " .. table.concat(finalFailed, ", "))
-end
-
-showToast("success", "Adlex v2.6", "Скрипт загружен успешно")
+game:GetService("TestService"):Message("[Adlex]: Loaded with WalkFling")
