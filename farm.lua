@@ -1,9 +1,6 @@
 -- ============================================================
--- ADLEX.LUA v2.6 — ПОЛНАЯ ВЕРСИЯ С WHITELIST
+-- ADLEX.LUA v2.6 — ПОЛНАЯ ВЕРСИЯ
 -- ============================================================
-
--- Ждём загрузки игры
-repeat task.wait() until game and game:GetService("Players")
 
 local P = game:GetService("Players")
 local U = game:GetService("UserInputService")
@@ -12,123 +9,6 @@ local H = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 local CoreGui = game:GetService("CoreGui")
-
--- ============================================================
--- GITHUB WHITELIST CHECK
--- ============================================================
-
-local WHITELIST_URL = "https://raw.githubusercontent.com/Yuka2241/adlex-whitelist/main/whitelist.json"
-
-local function checkWhitelist()
-    local userId = P.LocalPlayer.UserId
-    local httpService = game:GetService("HttpService")
-    
-    -- Создаём временный GUI для показа загрузки
-    local tempGui = Instance.new("ScreenGui", P.LocalPlayer:WaitForChild("PlayerGui"))
-    tempGui.Name = "WhitelistCheck"
-    tempGui.ResetOnSpawn = false
-    tempGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    local loadingFrame = Instance.new("Frame", tempGui)
-    loadingFrame.Size = UDim2.new(0, 300, 0, 100)
-    loadingFrame.Position = UDim2.new(0.5, -150, 0.5, -50)
-    loadingFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
-    loadingFrame.BorderSizePixel = 0
-    Instance.new("UICorner", loadingFrame).CornerRadius = UDim.new(0, 8)
-    local loadingStroke = Instance.new("UIStroke", loadingFrame)
-    loadingStroke.Color = Color3.fromRGB(114, 9, 183)
-    loadingStroke.Thickness = 2
-    
-    local loadingText = Instance.new("TextLabel", loadingFrame)
-    loadingText.Size = UDim2.new(1, -20, 1, 0)
-    loadingText.BackgroundTransparency = 1
-    loadingText.Text = "🔒 Проверка whitelist...\nПодключение к GitHub"
-    loadingText.TextColor3 = Color3.fromRGB(220, 220, 225)
-    loadingText.Font = Enum.Font.GothamMedium
-    loadingText.TextSize = 13
-    loadingText.TextWrapped = true
-    
-    -- Загружаем whitelist
-    local success, result = pcall(function()
-        return httpService:GetAsync(WHITELIST_URL)
-    end)
-    
-    if success then
-        local data = httpService:JSONDecode(result)
-        local isAllowed = false
-        
-        for _, allowedId in ipairs(data.whitelist) do
-            if allowedId == userId then
-                isAllowed = true
-                break
-            end
-        end
-        
-        if not isAllowed then
-            -- Удаляем окно загрузки
-            tempGui:Destroy()
-            
-            -- Создаём окно ошибки
-            local errorGui = Instance.new("ScreenGui", P.LocalPlayer:WaitForChild("PlayerGui"))
-            errorGui.Name = "WhitelistError"
-            errorGui.ResetOnSpawn = false
-            errorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            
-            local errorFrame = Instance.new("Frame", errorGui)
-            errorFrame.Size = UDim2.new(0, 350, 0, 150)
-            errorFrame.Position = UDim2.new(0.5, -175, 0.5, -75)
-            errorFrame.BackgroundColor3 = Color3.fromRGB(20, 5, 5)
-            errorFrame.BorderSizePixel = 0
-            Instance.new("UICorner", errorFrame).CornerRadius = UDim.new(0, 8)
-            local errorStroke = Instance.new("UIStroke", errorFrame)
-            errorStroke.Color = Color3.fromRGB(255, 50, 50)
-            errorStroke.Thickness = 2
-            
-            local errorTitle = Instance.new("TextLabel", errorFrame)
-            errorTitle.Size = UDim2.new(1, 0, 0, 40)
-            errorTitle.BackgroundTransparency = 1
-            errorTitle.Text = "⛔ ДОСТУП ЗАПРЕЩЕН"
-            errorTitle.TextColor3 = Color3.fromRGB(255, 80, 80)
-            errorTitle.Font = Enum.Font.GothamBlack
-            errorTitle.TextSize = 20
-            
-            local errorMsg = Instance.new("TextLabel", errorFrame)
-            errorMsg.Size = UDim2.new(1, -20, 0, 60)
-            errorMsg.Position = UDim2.new(0, 10, 0, 45)
-            errorMsg.BackgroundTransparency = 1
-            errorMsg.Text = "Вас нет в whitelist\n\nВаш UserId: " .. userId
-            errorMsg.TextColor3 = Color3.fromRGB(200, 200, 200)
-            errorMsg.Font = Enum.Font.GothamMedium
-            errorMsg.TextSize = 14
-            errorMsg.TextWrapped = true
-            
-            local errorFooter = Instance.new("TextLabel", errorFrame)
-            errorFooter.Size = UDim2.new(1, -20, 0, 20)
-            errorFooter.Position = UDim2.new(0, 10, 1, -25)
-            errorFooter.BackgroundTransparency = 1
-            errorFooter.Text = "Обратитесь к разработчику для получения доступа"
-            errorFooter.TextColor3 = Color3.fromRGB(120, 120, 125)
-            errorFooter.Font = Enum.Font.GothamMedium
-            errorFooter.TextSize = 11
-            
-            -- Ждём и останавливаем скрипт
-            task.wait(5)
-            errorGui:Destroy()
-            error("Whitelist check failed - user not authorized")
-        else
-            -- Пользователь авторизован
-            tempGui:Destroy()
-        end
-    else
-        -- GitHub недоступен
-        tempGui:Destroy()
-        warn("[Adlex] Не удалось загрузить whitelist с GitHub")
-        -- Продолжаем работу (или можешь поменять на error() если хочешь блокировать)
-    end
-end
-
--- Запускаем проверку whitelist
-checkWhitelist()
 
 -- ============================================================
 -- СИСТЕМА ЗАЩИТЫ
@@ -250,14 +130,11 @@ _G.coords = {x = "0.00", y = "0.00", z = "0.00"}
 _G.flyActive = false
 _G.flyKey = Enum.KeyCode.B
 _G.flyBinding = false
-_G.menuKey = Enum.KeyCode.RightShift
-_G.streamKey = Enum.KeyCode.F6
+_G.menuKey = Enum.KeyCode.Insert
 _G.menuBinding = false
 _G.chamsColor = Color3.fromRGB(128, 128, 128)
-_G.antiScreenshotMode = false
-_G.streamMode = false
-_G.drawingElements = {}
 _G.scriptStartTime = os.clock()
+_G.logoLabels = {}
 
 -- ============================================================
 -- КОНТЕЙНЕР GUI
@@ -581,120 +458,6 @@ function showToast(type, titleText, descText)
 end
 
 -- ============================================================
--- ANTI-SCREENSHOT СИСТЕМА
--- ============================================================
-
-local function detectRecordingSoftware()
-    local detected = {}
-    local signatures = {
-        "obs64", "obs32", "OBSStudio", "Discord", "discord_overlay",
-        "nvcontainer", "nvidia", "ShadowPlay", "xboxgamebar", "GameBar",
-        "bandicam", "Bandicam", "fraps", "Fraps", "camtasia", "Camtasia", "xsplit", "XSplit"
-    }
-    if getgc then
-        local gc = getgc()
-        for _, obj in ipairs(gc) do
-            if type(obj) == "table" then
-                for sig, name in pairs(signatures) do
-                    if rawget(obj, name) or tostring(obj):lower():find(name:lower()) then
-                        detected[name] = true
-                    end
-                end
-            end
-        end
-    end
-    return detected
-end
-
-local function createDrawingElement(type, props)
-    if not Drawing then return nil end
-    local el = Drawing.new(type)
-    for k, v in pairs(props) do
-        pcall(function() el[k] = v end)
-    end
-    table.insert(_G.drawingElements, el)
-    return el
-end
-
-local function enableAntiScreenshot()
-    _G.antiScreenshotMode = true
-    if _G.mf then
-        _G.mf.BackgroundTransparency = 1
-        for _, child in ipairs(_G.mf:GetDescendants()) do
-            if child:IsA("GuiObject") then
-                child.BackgroundTransparency = 1
-                child.TextTransparency = 1
-                if child:IsA("Frame") or child:IsA("TextLabel") or child:IsA("TextButton") then
-                    child.Visible = false
-                end
-            end
-        end
-    end
-    if Drawing then
-        _G.drawingWatermark = createDrawingElement("Text", {
-            Text = "Adlex.lua | PROTECTED | " .. os.date("%H:%M:%S"),
-            Size = 14, Center = false, Outline = true,
-            OutlineColor = Color3.fromRGB(0, 0, 0),
-            Color = Color3.fromRGB(255, 255, 255),
-            Position = Vector2.new(workspace.CurrentCamera.ViewportSize.X - 260, 10),
-            Visible = true, Font = 2
-        })
-        _G.drawingCoords = createDrawingElement("Text", {
-            Text = "X: 0.00 | Y: 0.00 | Z: 0.00",
-            Size = 13, Center = false, Outline = true,
-            OutlineColor = Color3.fromRGB(0, 0, 0),
-            Color = Color3.fromRGB(0, 255, 128),
-            Position = Vector2.new(10, 30), Visible = true, Font = 2
-        })
-        _G.drawingStatus = createDrawingElement("Text", {
-            Text = "Fly: OFF | Freeze: OFF | Noclip: OFF",
-            Size = 12, Center = false, Outline = true,
-            OutlineColor = Color3.fromRGB(0, 0, 0),
-            Color = Color3.fromRGB(255, 200, 0),
-            Position = Vector2.new(10, 50), Visible = true, Font = 2
-        })
-    end
-    showToast("success", "Anti-Screenshot", "Режим защиты активирован")
-end
-
-local function disableAntiScreenshot()
-    _G.antiScreenshotMode = false
-    if _G.mf then
-        _G.mf.BackgroundTransparency = 0
-        for _, child in ipairs(_G.mf:GetDescendants()) do
-            if child:IsA("GuiObject") then
-                child.BackgroundTransparency = 0
-                child.TextTransparency = 0
-                if child:IsA("Frame") or child:IsA("TextLabel") or child:IsA("TextButton") then
-                    child.Visible = true
-                end
-            end
-        end
-    end
-    for _, el in ipairs(_G.drawingElements) do
-        pcall(function() el:Remove() end)
-    end
-    _G.drawingElements = {}
-    _G.drawingWatermark = nil
-    _G.drawingCoords = nil
-    _G.drawingStatus = nil
-    showToast("success", "Anti-Screenshot", "Режим защиты отключен")
-end
-
-local function toggleStreamMode()
-    _G.streamMode = not _G.streamMode
-    if _G.sg then _G.sg.Enabled = not _G.streamMode end
-    for _, el in ipairs(_G.drawingElements) do
-        pcall(function() el.Visible = not _G.streamMode end)
-    end
-    if _G.streamMode then
-        showToast("warning", "Stream Mode", "GUI скрыт")
-    else
-        showToast("success", "Stream Mode", "GUI восстановлен")
-    end
-end
-
--- ============================================================
 -- ADLEX RECOGNITION (СКРЫТЫЙ)
 -- ============================================================
 
@@ -864,6 +627,7 @@ for i, l in ipairs(letters) do
     lbl.Font = Enum.Font.GothamBold
     lbl.BackgroundTransparency = 1
     lbl.TextTransparency = 1
+    table.insert(_G.logoLabels, lbl)
     task.spawn(function()
         task.wait(0.2 * i)
         TweenService:Create(lbl, TweenInfo.new(0.6), {TextTransparency = 0}):Play()
@@ -1190,26 +954,6 @@ R.RenderStepped:Connect(function()
             r.Velocity = Vector3.new(0, 0.1, 0)
         end
     end
-    
-    if _G.antiScreenshotMode then
-        if _G.drawingWatermark then
-            _G.drawingWatermark.Text = "Adlex.lua | PROTECTED | " .. os.date("%H:%M:%S")
-            _G.drawingWatermark.Position = Vector2.new(workspace.CurrentCamera.ViewportSize.X - 260, 10)
-        end
-        if _G.drawingCoords and _G.lp.Character then
-            local root = _G.lp.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                _G.drawingCoords.Text = string.format("X: %.2f | Y: %.2f | Z: %.2f",
-                    root.Position.X, root.Position.Y, root.Position.Z)
-            end
-        end
-        if _G.drawingStatus then
-            _G.drawingStatus.Text = string.format("Fly: %s | Freeze: %s | Noclip: %s",
-                _G.flyActive and "ON" or "OFF",
-                _G.frz and "ON" or "OFF",
-                _G.noclippedPlayers and "ON" or "OFF")
-        end
-    end
 end)
 
 -- Freeze
@@ -1279,9 +1023,9 @@ end)
 
 -- Темы
 local Themes = {
-    Black = {bg = Color3.fromRGB(15, 15, 18), side = Color3.fromRGB(22, 22, 26), text = Color3.fromRGB(255, 255, 255), wmText = Color3.fromRGB(240, 240, 245)},
-    Gray = {bg = Color3.fromRGB(35, 35, 40), side = Color3.fromRGB(45, 45, 50), text = Color3.fromRGB(240, 240, 245), wmText = Color3.fromRGB(240, 240, 245)},
-    Light = {bg = Color3.fromRGB(240, 240, 245), side = Color3.fromRGB(225, 225, 230), text = Color3.fromRGB(20, 20, 25), wmText = Color3.fromRGB(20, 20, 25)}
+    Black = {bg = Color3.fromRGB(15, 15, 18), side = Color3.fromRGB(22, 22, 26), text = Color3.fromRGB(255, 255, 255), wmText = Color3.fromRGB(240, 240, 245), logoText = Color3.fromRGB(255, 255, 255)},
+    Gray = {bg = Color3.fromRGB(35, 35, 40), side = Color3.fromRGB(45, 45, 50), text = Color3.fromRGB(240, 240, 245), wmText = Color3.fromRGB(240, 240, 245), logoText = Color3.fromRGB(255, 255, 255)},
+    Light = {bg = Color3.fromRGB(240, 240, 245), side = Color3.fromRGB(225, 225, 230), text = Color3.fromRGB(20, 20, 25), wmText = Color3.fromRGB(20, 20, 25), logoText = Color3.fromRGB(20, 20, 25)}
 }
 local curTheme = Themes.Black
 
@@ -1290,6 +1034,12 @@ local function uTheme()
     _G.sb.BackgroundColor3 = curTheme.side
     wmFrame.BackgroundColor3 = curTheme.bg
     wmText.TextColor3 = curTheme.wmText
+    -- Обновляем цвет логотипа ADLEX
+    if _G.logoLabels then
+        for _, lbl in ipairs(_G.logoLabels) do
+            lbl.TextColor3 = curTheme.logoText
+        end
+    end
     for _, v in pairs(_G.tabs) do
         if v.b then
             v.b.BackgroundColor3 = curTheme.side
@@ -1438,45 +1188,10 @@ applyChamsBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Кнопки защиты
-local antiShotBtn = _G.cBtn(settingsScroll, "Anti-Screenshot: OFF", UDim2.new(0, 0, 0, 0), UDim2.new(0, 200, 0, 35), Color3.fromRGB(40, 40, 45), "Toggle anti-screenshot")
-antiShotBtn.TextColor3 = Color3.fromRGB(180, 180, 185)
-antiShotBtn.LayoutOrder = 4
-
-antiShotBtn.MouseButton1Click:Connect(function()
-    if _G.antiScreenshotMode then
-        disableAntiScreenshot()
-        antiShotBtn.Text = "Anti-Screenshot: OFF"
-        antiShotBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-        antiShotBtn.TextColor3 = Color3.fromRGB(180, 180, 185)
-    else
-        enableAntiScreenshot()
-        antiShotBtn.Text = "Anti-Screenshot: ON"
-        antiShotBtn.BackgroundColor3 = Color3.fromRGB(30, 120, 50)
-        antiShotBtn.TextColor3 = Color3.fromRGB(220, 220, 225)
-    end
-end)
-
-local streamBtn = _G.cBtn(settingsScroll, "Stream Mode [F6]", UDim2.new(0, 0, 0, 0), UDim2.new(0, 200, 0, 35), Color3.fromRGB(114, 9, 183), "Toggle stream mode")
-streamBtn.LayoutOrder = 5
-streamBtn.MouseButton1Click:Connect(toggleStreamMode)
-
-local detectBtn = _G.cBtn(settingsScroll, "Scan Recording Apps", UDim2.new(0, 0, 0, 0), UDim2.new(0, 200, 0, 35), Color3.fromRGB(220, 120, 0), "Scan for recording software")
-detectBtn.LayoutOrder = 6
-detectBtn.MouseButton1Click:Connect(function()
-    local detected = detectRecordingSoftware()
-    if next(detected) then
-        local list = ""
-        for name, _ in pairs(detected) do list = list .. name .. ", " end
-        showToast("warning", "Detected", "Найдены: " .. list:sub(1, -3))
-    else
-        showToast("success", "Clean", "Программы записи не обнаружены")
-    end
-end)
-
-local mkb = _G.cBtn(settingsScroll, "Menu Key: [RightShift]", UDim2.new(0, 0, 0, 0), UDim2.new(0, 200, 0, 35), Color3.fromRGB(114, 9, 183), "Change menu key")
+-- Кнопка Menu Key
+local mkb = _G.cBtn(settingsScroll, "Menu Key: [Insert]", UDim2.new(0, 0, 0, 0), UDim2.new(0, 200, 0, 35), Color3.fromRGB(114, 9, 183), "Change menu key")
 mkb.Name = "MKeyBtn"
-mkb.LayoutOrder = 7
+mkb.LayoutOrder = 4
 mkb.MouseButton1Click:Connect(function()
     _G.menuBinding = true
     showToast("info", "Binding", "Нажмите клавишу для меню")
@@ -1524,9 +1239,6 @@ U.InputBegan:Connect(function(i, g)
     if i.KeyCode == _G.menuKey then
         _G.mf.Visible = not _G.mf.Visible
         showKeybindHint(_G.menuKey.Name, _G.mf.Visible and "Menu Opened" or "Menu Hidden")
-    end
-    if i.KeyCode == _G.streamKey then
-        toggleStreamMode()
     end
 end)
 
